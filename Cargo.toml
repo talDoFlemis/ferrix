@@ -1,0 +1,22 @@
+[package]
+name = "ferrix"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/taldoflemis/ferrix"
+authors = ["André Willyan <willyanpublic@protonmail.com>", "Said Rodrigues <coderflemis@gmail.com>"]
+readme = "README.md"
+
+[dependencies]
+
+[profile.release]
+codegen-units = 1
+panic = "abort"
+lto = true
+
+[profile.bench-profile]
+inherits = "release"
+debug = true
+
+[profile.dist]
+inherits = "release"
+lto = "thin"
