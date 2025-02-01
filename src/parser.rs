@@ -279,6 +279,7 @@ impl<'a> WinnowFerrixParser<'a> {
                 Self::parse_sort_command,
                 Self::parse_cat_command,
                 Self::parse_exit_command,
+                fail.context(cx().msg("Unknown command").lbl("valid command")),
             )),
             Self::newline,
         )
