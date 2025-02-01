@@ -48,6 +48,11 @@ impl FerrixParseContext {
         self.label = Some(txt.as_ref().to_string());
         self
     }
+
+    fn hlp(mut self, txt: impl AsRef<str>) -> Self {
+        self.help = Some(txt.as_ref().to_string());
+        self
+    }
 }
 
 fn cx() -> FerrixParseContext {
@@ -281,7 +286,8 @@ impl<'a> WinnowFerrixParser<'a> {
             e.add_context(
                 input,
                 &input.checkpoint(),
-                cx().msg("Expected a number of integers for touch command"),
+                cx().msg("Expected a number of integers for touch command")
+                    .hlp("The number of integers to generate in the file"),
             )
         })?;
 
@@ -803,6 +809,49 @@ mod tests {
 
             // Assert
             assert_eq!(result.unwrap(), *output);
+        }
+    }
+
+    #[test]
+    fn test_bad_touch_command() {
+        // Arrange
+        let inputs = [
+            "touch",
+            "touch test.txt",
+        ];
+
+        let outputs = [
+            FerrixError {
+                input: Arc::new("touch".to_string()),
+                diagnostics: vec![FerrixDiagnostic {
+                    input: Arc::new("touch".to_string()),
+                    span: (0usize..5usize).into(),
+                    message: Some("Expected a path buffer for touch command".to_string()),
+                    label: None,
+                    help: None,
+                    severity: Severity::Error,
+                }],
+            },
+            FerrixError {
+                input: Arc::new("touch test.txt".to_string()),
+                diagnostics: vec![FerrixDiagnostic {
+                    input: Arc::new("touch test.txt".to_string()),
+                    span: (0usize..14usize).into(),
+                    message: Some("Expected a number of integers for touch command".to_string()),
+                    label: None,
+                    help: Some("The number of integers to generate in the file".to_string()),
+                    severity: Severity::Error,
+                }],
+            },
+        ];
+
+        // Arrange
+        for (input, output) in inputs.iter().zip(outputs.iter()) {
+            let result = try_parse(WinnowFerrixParser::parse_touch_command, input);
+
+            // Assert
+            assert!(result.is_err());
+            assert_eq!(result.unwrap_err(), *output);
         }
     }
 
