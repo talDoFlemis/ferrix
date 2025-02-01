@@ -139,24 +139,46 @@ pub enum CompleteCommand {
         number_of_integers: u32,
     },
     /// Move a file from one location to another
-    Move { from: PathBuf, to: PathBuf },
+    Move {
+        from: PathBuf,
+        to: PathBuf,
+    },
     /// Create a new directory
     /// If parents is true, create all parent directories if they don't exist
-    MkDir { dir: PathBuf, parents: bool },
+    MkDir {
+        dir: PathBuf,
+        parents: bool,
+    },
     /// Remove a given file from the ferrix fs
-    Remove { file: PathBuf, recursive: bool },
+    Remove {
+        file: PathBuf,
+        recursive: bool,
+    },
     /// Read the content of a file and output it to stdout
-    Head { file: PathBuf, start: u32, end: u32 },
+    Head {
+        file: PathBuf,
+        start: u32,
+        end: u32,
+    },
     /// List directory contents with each file and dir with their size on the right size and system
     /// storage info at the bottom
-    List { dir: Option<PathBuf>, all: bool },
+    List {
+        dir: Option<PathBuf>,
+        all: bool,
+    },
     /// Sort a given inline integer vector file
-    Sort { file: PathBuf, inverse_order: bool },
+    Sort {
+        file: PathBuf,
+        inverse_order: bool,
+    },
     /// Concat a given list of files into a stream and output it's content to a output file or
     /// fd
     Cat {
         files: Vec<PathBuf>,
         output_file: Option<PathBuf>,
+    },
+    Exit {
+        code: u32,
     },
 }
 
@@ -241,7 +263,8 @@ impl<'a> WinnowFerrixParser<'a> {
     ///                 | head_command
     ///                 | list_command
     ///                 | sort_command
-    ///                 | cat_command;
+    ///                 | cat_command
+    ///                 | exit_command;
     /// ```
     fn parse_complete_command(input: &mut Input<'_>) -> ParserResult<CompleteCommand> {
         let command = delimited(
@@ -255,6 +278,7 @@ impl<'a> WinnowFerrixParser<'a> {
                 Self::parse_list_command,
                 Self::parse_sort_command,
                 Self::parse_cat_command,
+                Self::parse_exit_command,
             )),
             Self::newline,
         )
@@ -517,6 +541,28 @@ impl<'a> WinnowFerrixParser<'a> {
         .parse_next(input)?;
 
         Ok(CompleteCommand::Cat { files, output_file })
+    }
+
+    /// Parse an exit command from the input
+    ///
+    /// # Grammar
+    /// ```md
+    /// exit_command := "exit" integer;
+    /// ```
+    fn parse_exit_command(input: &mut Input<'_>) -> ParserResult<CompleteCommand> {
+        Self::wss.parse_next(input)?;
+
+        "exit".parse_next(input)?;
+
+        let code = Self::parse_unsigned_integer(input).map_err(|e| {
+            e.add_context(
+                input,
+                &input.checkpoint(),
+                cx().msg("Expected an exit code for exit command"),
+            )
+        })?;
+
+        Ok(CompleteCommand::Exit { code })
     }
 
     /// Parse a path buffer from the input
@@ -815,10 +861,7 @@ mod tests {
     #[test]
     fn test_bad_touch_command() {
         // Arrange
-        let inputs = [
-            "touch",
-            "touch test.txt",
-        ];
+        let inputs = ["touch", "touch test.txt"];
 
         let outputs = [
             FerrixError {
@@ -1255,6 +1298,26 @@ mod tests {
     }
 
     #[test]
+    fn test_exit_command() {
+        // Arrange
+        let inputs = ["exit 0", "exit 1   ", "   exit 2", "   exit 3   "];
+        let outputs = [
+            CompleteCommand::Exit { code: 0 },
+            CompleteCommand::Exit { code: 1 },
+            CompleteCommand::Exit { code: 2 },
+            CompleteCommand::Exit { code: 3 },
+        ];
+
+        // Arrange
+        for (input, output) in inputs.iter().zip(outputs.iter()) {
+            let result = try_parse(WinnowFerrixParser::parse_exit_command, input);
+
+            // Assert
+            assert_eq!(result.unwrap(), *output);
+        }
+    }
+
+    #[test]
     fn test_parse_all_commands() {
         // Arrange
         let input = r#"
@@ -1266,6 +1329,7 @@ mod tests {
             ls
             sort test.txt
             cat test.txt test2.txt > output.txt
+            exit 0
         "#;
 
         let outputs = [
@@ -1302,6 +1366,7 @@ mod tests {
                 files: vec![PathBuf::from("test.txt"), PathBuf::from("test2.txt")],
                 output_file: Some(PathBuf::from("output.txt")),
             },
+            CompleteCommand::Exit { code: 0 },
         ];
 
         // Arrange
