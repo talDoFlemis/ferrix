@@ -7,6 +7,9 @@ authors = ["André Willyan <willyanpublic@protonmail.com>", "Said Rodrigues <cod
 readme = "README.md"
 
 [dependencies]
+miette = { version = "7.4.0", features = ["fancy"] }
+thiserror = "2.0.11"
+winnow = { version = "0.6.26", features = ["alloc", "unstable-recover"] }
 
 [profile.release]
 codegen-units = 1
