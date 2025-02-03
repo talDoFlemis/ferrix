@@ -7,6 +7,8 @@ authors = ["André Willyan <willyanpublic@protonmail.com>", "Said Rodrigues <cod
 readme = "README.md"
 
 [dependencies]
+clap = { version = "4.5.27", features = ["derive"] }
+clap-repl = "0.3.1"
 miette = { version = "7.4.0", features = ["fancy"] }
 thiserror = "2.0.11"
 winnow = { version = "0.6.26", features = ["alloc", "unstable-recover"] }
