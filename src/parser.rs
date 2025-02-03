@@ -772,7 +772,7 @@ mod tests {
 
         let mut outputs = vec![];
 
-        #[cfg(target_os = "linux")]
+        #[cfg(target_family = "unix")]
         {
             inputs.extend(vec![
                 "test.txt",
@@ -794,7 +794,7 @@ mod tests {
             ]);
         }
 
-        #[cfg(target_os = "windows")]
+        #[cfg(target_family = "windows")]
         {
             inputs.extend(vec![
                 "C:\\test.txt",
