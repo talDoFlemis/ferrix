@@ -1,5 +1,3 @@
-use std::io::BufReader;
-
 use ferrix::fs::Filesystem;
 use miette::Result;
 
@@ -8,10 +6,9 @@ struct MockedFS;
 impl Filesystem for MockedFS {}
 
 fn main() -> Result<()> {
-    let reader = BufReader::new(std::io::stdin());
-    let writer = std::io::stdout();
+    let system = ferrix::system::System::new(MockedFS);
+    let mut repl = ferrix::repl_v2::ReplV2::new(system);
 
-    let mut repl = ferrix::repl::Repl::new(reader, writer, MockedFS);
     repl.run()?;
 
     Ok(())
