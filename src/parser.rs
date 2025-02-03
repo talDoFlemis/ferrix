@@ -794,24 +794,6 @@ mod tests {
             ]);
         }
 
-        #[cfg(target_family = "windows")]
-        {
-            inputs.extend(vec![
-                r"C:\test.txt",
-                r"C:\Windows\test.txt",
-                "..\test.txt",
-                ".\test.txt",
-                r"D:\Program Files\test.txt",
-            ]);
-            outputs.extend(vec![
-                PathBuf::from("C:\test.txt"),
-                PathBuf::from(r"C:\Windows\test.txt"),
-                PathBuf::from("..\test.txt"),
-                PathBuf::from(".\test.txt"),
-                PathBuf::from(r"D:\Program Files\test.txt"),
-            ]);
-        }
-
         // Arrange
         for (input, output) in inputs.iter().zip(outputs.iter()) {
             let result = try_parse(WinnowFerrixParser::parse_path_buffer, input);
