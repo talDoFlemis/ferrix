@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: ["main"]
+    branches: ["master"]
   pull_request:
-    branches: ["main"]
+    branches: ["master"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,10 +27,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
       - name: Build
         run: cargo build --verbose
       - name: Test

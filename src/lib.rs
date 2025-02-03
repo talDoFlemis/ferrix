@@ -1,7 +1,10 @@
+mod complete_command;
 mod error;
 pub mod fs;
 pub mod parser;
 pub mod repl;
+pub mod repl_v2;
+pub mod system;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right

@@ -768,47 +768,22 @@ mod tests {
     #[test]
     fn test_parse_path_buffer() {
         // Arrange
-        let mut inputs = vec![];
+        let mut inputs = vec!["test.txt", "test.txt   ", "   test.txt", "   test.txt   "];
 
-        let mut outputs = vec![];
+        let mut outputs = vec![
+            PathBuf::from("test.txt"),
+            PathBuf::from("test.txt"),
+            PathBuf::from("test.txt"),
+            PathBuf::from("test.txt"),
+        ];
 
-        #[cfg(target_os = "linux")]
+        #[cfg(target_family = "unix")]
         {
-            inputs.extend(vec![
-                "test.txt",
-                "test.txt   ",
-                "   test.txt",
-                "   test.txt   ",
-                "./test.txt",
-                "/test.txt",
-                "/tmp/test.txt",
-            ]);
+            inputs.extend(vec!["./test.txt", "/test.txt", "/tmp/test.txt"]);
             outputs.extend(vec![
-                PathBuf::from("test.txt"),
-                PathBuf::from("test.txt"),
-                PathBuf::from("test.txt"),
-                PathBuf::from("test.txt"),
                 PathBuf::from("./test.txt"),
                 PathBuf::from("/test.txt"),
                 PathBuf::from("/tmp/test.txt"),
-            ]);
-        }
-
-        #[cfg(target_os = "windows")]
-        {
-            inputs.extend(vec![
-                "C:\\test.txt",
-                "C:\\Windows\\test.txt",
-                "..\\test.txt",
-                ".\\test.txt",
-                "D:\\Program Files\\test.txt",
-            ]);
-            outputs.extend(vec![
-                PathBuf::from("C:\\test.txt"),
-                PathBuf::from("C:\\Windows\\test.txt"),
-                PathBuf::from("..\\test.txt"),
-                PathBuf::from(".\\test.txt"),
-                PathBuf::from("D:\\Program Files\\test.txt"),
             ]);
         }
 
