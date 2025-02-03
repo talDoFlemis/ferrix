@@ -1,2 +1,1 @@
-pub trait Filesystem {
-}
+pub trait Filesystem {}
