@@ -768,26 +768,19 @@ mod tests {
     #[test]
     fn test_parse_path_buffer() {
         // Arrange
-        let mut inputs = vec![];
+        let mut inputs = vec!["test.txt", "test.txt   ", "   test.txt", "   test.txt   "];
 
-        let mut outputs = vec![];
+        let mut outputs = vec![
+            PathBuf::from("test.txt"),
+            PathBuf::from("test.txt"),
+            PathBuf::from("test.txt"),
+            PathBuf::from("test.txt"),
+        ];
 
         #[cfg(target_family = "unix")]
         {
-            inputs.extend(vec![
-                "test.txt",
-                "test.txt   ",
-                "   test.txt",
-                "   test.txt   ",
-                "./test.txt",
-                "/test.txt",
-                "/tmp/test.txt",
-            ]);
+            inputs.extend(vec!["./test.txt", "/test.txt", "/tmp/test.txt"]);
             outputs.extend(vec![
-                PathBuf::from("test.txt"),
-                PathBuf::from("test.txt"),
-                PathBuf::from("test.txt"),
-                PathBuf::from("test.txt"),
                 PathBuf::from("./test.txt"),
                 PathBuf::from("/test.txt"),
                 PathBuf::from("/tmp/test.txt"),
