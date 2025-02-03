@@ -797,18 +797,18 @@ mod tests {
         #[cfg(target_family = "windows")]
         {
             inputs.extend(vec![
-                "C:\\test.txt",
-                "C:\\Windows\\test.txt",
-                "..\\test.txt",
-                ".\\test.txt",
-                "D:\\Program Files\\test.txt",
+                r"C:\test.txt",
+                r"C:\Windows\test.txt",
+                "..\test.txt",
+                ".\test.txt",
+                r"D:\Program Files\test.txt",
             ]);
             outputs.extend(vec![
-                PathBuf::from("C:\\test.txt"),
-                PathBuf::from("C:\\Windows\\test.txt"),
-                PathBuf::from("..\\test.txt"),
-                PathBuf::from(".\\test.txt"),
-                PathBuf::from("D:\\Program Files\\test.txt"),
+                PathBuf::from("C:\test.txt"),
+                PathBuf::from(r"C:\Windows\test.txt"),
+                PathBuf::from("..\test.txt"),
+                PathBuf::from(".\test.txt"),
+                PathBuf::from(r"D:\Program Files\test.txt"),
             ]);
         }
 
