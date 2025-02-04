@@ -1,12 +1,15 @@
-use ferrix::fs::Filesystem;
+use clap::Parser;
+use ferrix::{cli::FerrixCLI, fs::BasicFS, vdisk::VDisk};
 use miette::Result;
 
-struct MockedFS;
-
-impl Filesystem for MockedFS {}
-
 fn main() -> Result<()> {
-    let system = ferrix::system::System::new(MockedFS);
+    let cli = FerrixCLI::parse();
+
+    let vdisk = VDisk::new(cli.vdisk_path, cli.size_in_bytes)?;
+
+    let basic_fs = BasicFS::new(vdisk);
+
+    let system = ferrix::system::System::new(basic_fs);
     let mut repl = ferrix::repl_v2::ReplV2::new(system);
 
     repl.run()?;
