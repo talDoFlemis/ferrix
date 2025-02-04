@@ -23,7 +23,7 @@ impl VDisk {
 
     #[cfg(target_family = "unix")]
     fn create_new_disk(path: PathBuf, size: u32) -> Result<VDisk> {
-        use nix::fcntl::posix_fallocate;
+        use libc::posix_fallocate;
         use std::os::fd::AsRawFd;
 
         let disk = OpenOptions::new()
@@ -33,7 +33,9 @@ impl VDisk {
             .open(&path)
             .into_diagnostic()?;
 
-        posix_fallocate(disk.as_raw_fd(), 0, size.into()).into_diagnostic()?;
+        unsafe {
+            posix_fallocate(disk.as_raw_fd(), 0, size.into());
+        }
 
         Ok(Self { size, disk })
     }
