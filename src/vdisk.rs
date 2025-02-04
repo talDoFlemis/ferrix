@@ -67,7 +67,7 @@ impl VDisk {
     fn create_new_disk(path: PathBuf, size: u32) -> Result<VDisk> {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::Storage::FileSystem::{
-            SetFileInformationByHandle, FILE_ALLOCATION_INFO,
+            FileAllocationInfo, SetFileInformationByHandle, FILE_ALLOCATION_INFO,
         };
 
         let disk = OpenOptions::new()
@@ -76,20 +76,27 @@ impl VDisk {
             .open(path)
             .into_diagnostic()?;
 
-        let handle = disk.as_raw_handle() as isize;
+        let handle = disk.as_raw_handle();
 
         let allocation_info = FILE_ALLOCATION_INFO {
             AllocationSize: size as i64,
         };
 
-        unsafe {
+        let result = unsafe {
             SetFileInformationByHandle(
-                handle,
-                5,
+                handle as _,
+                FileAllocationInfo,
                 &allocation_info as *const _ as *mut _,
                 std::mem::size_of::<FILE_ALLOCATION_INFO>() as u32,
-            );
+            )
+        };
+
+        if result == 0 {
+            return Err(std::io::Error::last_os_error()).into_diagnostic();
         }
+
+        disk.set_len(size as u64).into_diagnostic()?;
+        disk.sync_all().into_diagnostic()?;
 
         Ok(Self { size, disk })
     }
