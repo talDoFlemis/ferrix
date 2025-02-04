@@ -83,3 +83,100 @@ impl TryFrom<PathBuf> for VDisk {
         Ok(Self { size, disk })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::tempdir;
+
+    #[test]
+    fn test_new_disk_creation() -> Result<()> {
+        let dir = tempdir().into_diagnostic()?;
+        let path = dir.path().join("test_disk.vd");
+        let size = 1024 * 1024; // 1MB
+
+        let vdisk = VDisk::new(path.clone(), size)?;
+        assert_eq!(vdisk.size, size);
+
+        // Verify file exists and has correct size
+        let metadata = fs::metadata(path).into_diagnostic()?;
+        assert_eq!(metadata.len() as u32, size);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_existing_disk_open() -> Result<()> {
+        let dir = tempdir().into_diagnostic()?;
+        let path = dir.path().join("existing_disk.vd");
+        let size = 1024 * 1024; // 1MB
+
+        // Create initial disk
+        let _vdisk = VDisk::new(path.clone(), size)?;
+
+        // Try opening existing disk
+        let vdisk2 = VDisk::new(path.clone(), size)?;
+        assert_eq!(vdisk2.size, size);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_try_from_pathbuf() -> Result<()> {
+        let dir = tempdir().into_diagnostic()?;
+        let path = dir.path().join("convert_disk.vd");
+        let size = 1024 * 1024; // 1MB
+
+        // Create initial disk
+        let _vdisk = VDisk::new(path.clone(), size)?;
+
+        // Convert from PathBuf
+        let vdisk2 = VDisk::try_from(path)?;
+        assert_eq!(vdisk2.size, size);
+
+        Ok(())
+    }
+
+    #[cfg(target_family = "unix")]
+    mod unix_tests {
+        use super::*;
+        use std::os::unix::fs::FileExt;
+
+        #[test]
+        fn test_unix_specific_disk_ops() -> Result<()> {
+            let dir = tempdir().into_diagnostic()?;
+            let path = dir.path().join("unix_disk.vd");
+            let size = 1024 * 1024; // 1MB
+
+            let vdisk = VDisk::new(path, size)?;
+
+            // Test Unix-specific file operations
+            let written = vdisk.disk.write_at(b"test", 0).into_diagnostic()?;
+            assert_eq!(written, 4);
+
+            Ok(())
+        }
+    }
+
+    #[cfg(target_family = "windows")]
+    mod windows_tests {
+        use super::*;
+        use std::os::windows::fs::FileExt;
+
+        #[test]
+        fn test_windows_specific_disk_ops() -> Result<()> {
+            let dir = tempdir().into_diagnostic()?;
+            let path = dir.path().join("windows_disk.vd");
+            let size = 1024 * 1024; // 1MB
+
+            let vdisk = VDisk::new(path, size)?;
+
+            // Test Windows-specific file operations
+            let written = vdisk.disk.seek_write(b"test", 0).into_diagnostic()?;
+            assert_eq!(written, 4);
+
+            Ok(())
+        }
+    }
+}

@@ -15,6 +15,9 @@ winnow = { version = "0.6.26", features = ["alloc", "unstable-recover"] }
 nix = { version = "0.29.0", features = ["fs"] }
 windows-sys = "0.59.0"
 
+[dev-dependencies]
+tempfile = "3.16.0"
+
 [profile.release]
 codegen-units = 1
 panic = "abort"
