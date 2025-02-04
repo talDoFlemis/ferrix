@@ -1,6 +1,7 @@
 use std::{
     fs::{File, OpenOptions},
     path::PathBuf,
+    usize,
 };
 
 /// One gigabyte in bytes
@@ -21,9 +22,9 @@ impl VDisk {
         }
     }
 
-    #[cfg(target_family = "unix")]
+    #[cfg(target_os = "linux")]
     fn create_new_disk(path: PathBuf, size: u32) -> Result<VDisk> {
-        use libc::posix_fallocate;
+        use nix::fcntl::{fallocate, FallocateFlags};
         use std::os::fd::AsRawFd;
 
         let disk = OpenOptions::new()
@@ -33,8 +34,30 @@ impl VDisk {
             .open(&path)
             .into_diagnostic()?;
 
-        unsafe {
-            posix_fallocate(disk.as_raw_fd(), 0, size.into());
+        fallocate(disk.as_raw_fd(), FallocateFlags::empty(), 0, size.into()).into_diagnostic()?;
+
+        Ok(Self { size, disk })
+    }
+
+    #[cfg(target_os = "macos")]
+    fn create_new_disk(path: PathBuf, size: u32) -> Result<VDisk> {
+        use std::io::Write;
+        let mut disk = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(path)
+            .into_diagnostic()?;
+
+        let file_size = size as usize;
+        let chunk_size = 1024 * 1024;
+        let mut buffer = vec![0; chunk_size];
+
+        let mut written = 0;
+
+        while written < file_size {
+            let to_write = std::cmp::min(chunk_size, file_size - written);
+            disk.write_all(&buffer[..to_write]).into_diagnostic()?;
+            written += to_write;
         }
 
         Ok(Self { size, disk })
