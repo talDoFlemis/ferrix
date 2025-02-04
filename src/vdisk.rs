@@ -70,8 +70,13 @@ impl VDisk {
             SetFileInformationByHandle, FILE_ALLOCATION_INFO,
         };
 
-        let disk = OpenOptions::new().write(true).create(true).open(path)?;
-        let handle = file.as_raw_handle() as isize;
+        let disk = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(path)
+            .into_diagnostic()?;
+
+        let handle = disk.as_raw_handle() as isize;
 
         let allocation_info = FILE_ALLOCATION_INFO {
             AllocationSize: size as i64,
