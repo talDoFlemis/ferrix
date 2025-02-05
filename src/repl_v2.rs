@@ -1,4 +1,6 @@
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
+use std::cell::RefCell;
+use std::sync::{Arc, RwLock};
 
 use miette::Result;
 
@@ -6,10 +8,9 @@ use clap_repl::reedline::{Prompt, PromptHistorySearchStatus};
 use clap_repl::ClapEditor;
 
 use crate::complete_command::CompleteCommand;
-use crate::fs::Filesystem;
 use crate::system::System;
 
-static DEFAULT_PROMPT_INDICATOR: &str = ">> ";
+static DEFAULT_PROMPT_INDICATOR: &str = "$ ";
 static DEFAULT_MULTILINE_INDICATOR: &str = "::: ";
 
 #[derive(Clone)]
@@ -22,29 +23,32 @@ pub enum FerrixPromptSegment {
     Empty,
 }
 
-struct FerrixPrompt {
+pub struct FerrixPrompt<S: System + Send + Sync> {
     segment: FerrixPromptSegment,
+    system: S,
 }
 
-impl FerrixPrompt {
-    pub fn new(segment: FerrixPromptSegment) -> Self {
-        Self { segment }
+impl<S: System + Send + Sync> FerrixPrompt<S> {
+    pub fn new(system: S, segment: FerrixPromptSegment) -> Self {
+        Self { segment, system }
     }
 }
 
-impl FerrixPrompt {
+impl<S: System + Send + Sync> FerrixPrompt<S> {
     fn render_prompt_segment(&self) -> Cow<str> {
         match &self.segment {
             FerrixPromptSegment::Basic(s) => s.into(),
-            FerrixPromptSegment::WorkingDirectory => {
-                Cow::Owned("/path/to/currentdir/@ferrix".to_string())
-            }
+            FerrixPromptSegment::WorkingDirectory => Cow::Owned(format!(
+                "{}{}",
+                self.system.get_cwd().unwrap_or_default().to_string_lossy(),
+                "@ferrix",
+            )),
             FerrixPromptSegment::Empty => Cow::Borrowed(""),
         }
     }
 }
 
-impl Prompt for FerrixPrompt {
+impl<S: System + Send + Sync> Prompt for FerrixPrompt<S> {
     fn render_prompt_left(&self) -> std::borrow::Cow<str> {
         self.render_prompt_segment()
     }
@@ -79,32 +83,24 @@ impl Prompt for FerrixPrompt {
     }
 }
 
-pub struct ReplV2<F>
-where
-    F: Filesystem,
-{
-    system: System<F>,
-}
+pub struct ReplV2 {}
 
-impl<F> ReplV2<F>
-where
-    F: Filesystem,
-{
-    pub fn new(system: System<F>) -> Self {
-        Self { system }
-    }
-
-    pub fn run(&mut self) -> Result<()> {
-        let prompt = FerrixPrompt::new(FerrixPromptSegment::Basic("ferrix".into()));
-
+impl ReplV2 {
+    pub fn run<S>(system: S, prompt: FerrixPrompt<S>) -> Result<()>
+    where
+        S: System + Send + Sync + 'static,
+    {
         let rl = ClapEditor::<CompleteCommand>::builder()
             .with_prompt(Box::new(prompt))
             .build();
 
-        rl.repl(|cmd| {
-            self.system
-                .process_command(cmd)
-                .expect("expected to process command")
+        rl.repl(|cmd| match cmd {
+            CompleteCommand::Exit(cmd) => {
+                if let Err(e) = system.exit(&cmd) {
+                    eprintln!("Error exiting: {:?}", e);
+                }
+            }
+            _ => eprintln!("Command not implemented: {:?}", cmd),
         });
 
         Ok(())
