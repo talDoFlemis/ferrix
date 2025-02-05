@@ -3,84 +3,110 @@ use std::path::PathBuf;
 use clap::Parser;
 
 #[derive(Debug, Parser)]
+pub struct TouchCommand {
+    /// The file to create
+    pub file: PathBuf,
+    /// The number of integers to write to the file
+    #[arg(short, long)]
+    pub number_of_integers: u32,
+}
+
+#[derive(Debug, Parser)]
+pub struct MoveCommand {
+    /// The file to move
+    pub from: PathBuf,
+    /// The destination of the file
+    pub to: PathBuf,
+}
+
+#[derive(Debug, Parser)]
+pub struct MakeDirCommand {
+    /// The directory to create
+    pub dir: PathBuf,
+    /// Create all parent directories if they don't exist
+    #[arg(short, long)]
+    pub parents: bool,
+}
+
+#[derive(Debug, Parser)]
+pub struct RemoveCommand {
+    /// The file or path to remove
+    pub file_or_dir: PathBuf,
+    /// If true, remove all files in the directory
+    #[arg(short, long)]
+    pub recursive: bool,
+}
+
+#[derive(Debug, Parser)]
+pub struct HeadCommand {
+    /// The file to read
+    pub file: PathBuf,
+    /// The number of lines to start reading from the beginning
+    #[arg(short, long, default_value = "0")]
+    pub start: u32,
+    /// The amount of lines to read
+    #[arg(short, long, default_value = "10")]
+    pub end: u32,
+}
+
+#[derive(Debug, Parser)]
+pub struct ListCommand {
+    /// The directory to list
+    pub dir: Option<PathBuf>,
+    /// If true, list all files including hidden files
+    #[arg(short, long)]
+    pub all: bool,
+}
+
+#[derive(Debug, Parser)]
+pub struct SortCommand {
+    /// The file to sort
+    pub file: PathBuf,
+    /// If true, sort the file in reverse order
+    #[arg(short, long)]
+    pub inverse_order: bool,
+}
+
+#[derive(Debug, Parser)]
+pub struct CatCommand {
+    /// The files to concatenate
+    pub files: Vec<PathBuf>,
+    /// The output file to write the concatenated content to
+    #[arg(short, long)]
+    pub output_file: Option<PathBuf>,
+}
+
+#[derive(Debug, Parser)]
+pub struct ExitCommand {
+    /// The exit code to return
+    pub code: i32,
+}
+
+#[derive(Debug, Parser)]
 #[command(name = "")]
 pub enum CompleteCommand {
     /// Creates a new file with a given amount of integers
-    Touch {
-        /// The file to create
-        file: PathBuf,
-        /// The number of integers to write to the file
-        #[arg(short, long)]
-        number_of_integers: u32,
-    },
+    Touch(TouchCommand),
     /// Move a file from one location to another
     #[command(name = "mv")]
-    Move {
-        /// The file to move
-        from: PathBuf,
-        /// The destination of the file
-        to: PathBuf,
-    },
+    Move(MoveCommand),
     /// Create a new directory
     #[command(name = "mkdir")]
-    MakeDir {
-        /// The directory to create
-        dir: PathBuf,
-        /// Create all parent directories if they don't exist
-        #[arg(short, long)]
-        parents: bool,
-    },
+    MakeDir(MakeDirCommand),
     /// Remove a given file from the ferrix fs
     #[command(name = "rm")]
-    Remove {
-        /// The file or path to remove
-        file_or_dir: PathBuf,
-        /// If true, remove all files in the directory
-        #[arg(short, long)]
-        recursive: bool,
-    },
+    Remove(RemoveCommand),
     /// Read the content of a file and output it to stdout
-    Head {
-        /// The file to read
-        file: PathBuf,
-        /// The number of lines to start reading from the beginning
-        #[arg(short, long, default_value = "0")]
-        start: u32,
-        /// The amount of lines to read
-        #[arg(short, long)]
-        #[arg(short, long, default_value = "10")]
-        end: u32,
-    },
+    Head(HeadCommand),
     /// List directory contents with each file and dir with their size on the right size and system
     /// storage info at the bottom
     #[command(name = "ls")]
-    List {
-        /// The directory to list
-        dir: Option<PathBuf>,
-        /// If true, list all files including hidden files
-        #[arg(short, long)]
-        all: bool,
-    },
+    List(ListCommand),
     /// Sort a given inline integer vector file
-    Sort {
-        /// The file to sort
-        file: PathBuf,
-        /// If true, sort the file in reverse order
-        #[arg(short, long)]
-        inverse_order: bool,
-    },
+    Sort(SortCommand),
     /// Concat a given list of files into a stream and output it's content to a output file or
     /// fd
-    Cat {
-        /// The files to concatenate
-        files: Vec<PathBuf>,
-        /// The output file to write the concatenated content to
-        #[arg(short, long)]
-        output_file: Option<PathBuf>,
-    },
+    Cat(CatCommand),
     /// Exit the ferrix repl
-    Exit {
-        /// The exit code to return
-        code: u32,
-    },
+    Exit(ExitCommand),
 }
