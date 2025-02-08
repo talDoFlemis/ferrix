@@ -1,7 +1,6 @@
 use std::{
     fs::{File, OpenOptions},
     path::PathBuf,
-    usize,
 };
 
 /// One gigabyte in bytes
@@ -9,9 +8,24 @@ pub static DEFAULT_SIZE_IN_BYTES: u32 = 1e9 as u32;
 
 use miette::{IntoDiagnostic, Result};
 
+pub type VDiskSize = u32;
+
 pub struct VDisk {
-    size: u32,
+    size: VDiskSize,
     disk: File,
+}
+
+impl Clone for VDisk {
+    fn clone(&self) -> Self {
+        Self {
+            size: self.size,
+            disk: self
+                .disk
+                .try_clone()
+                .into_diagnostic()
+                .expect("Failed to clone disk"),
+        }
+    }
 }
 
 impl VDisk {

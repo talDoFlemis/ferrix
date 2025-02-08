@@ -13,3 +13,11 @@ impl BasicFS {
 }
 
 impl Filesystem for BasicFS {}
+
+impl Clone for BasicFS {
+    fn clone(&self) -> Self {
+        Self {
+            vdisk: self.vdisk.clone(),
+        }
+    }
+}

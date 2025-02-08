@@ -1,5 +1,10 @@
 use clap::Parser;
-use ferrix::{cli::FerrixCLI, fs::BasicFS, vdisk::VDisk};
+use ferrix::{
+    cli::FerrixCLI,
+    fs::BasicFS,
+    repl_v2::{FerrixPrompt, FerrixPromptSegment, ReplV2},
+    vdisk::VDisk,
+};
 use miette::Result;
 
 fn main() -> Result<()> {
@@ -9,10 +14,12 @@ fn main() -> Result<()> {
 
     let basic_fs = BasicFS::new(vdisk);
 
-    let system = ferrix::system::System::new(basic_fs);
-    let mut repl = ferrix::repl_v2::ReplV2::new(system);
+    let system = ferrix::system::BasicSystem::new(basic_fs);
+    let segment = FerrixPromptSegment::WorkingDirectory;
 
-    repl.run()?;
+    let prompt = FerrixPrompt::new(system.clone(), segment);
+
+    ReplV2::run(system, prompt)?;
 
     Ok(())
 }
