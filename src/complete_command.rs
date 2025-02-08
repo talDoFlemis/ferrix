@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::ffi::OsString;
 
 use clap::Parser;
 
 #[derive(Debug, Parser)]
 pub struct TouchCommand {
     /// The file to create
-    pub file: PathBuf,
+    pub file: OsString,
     /// The number of integers to write to the file
     #[arg(short, long)]
     pub number_of_integers: u32,
@@ -13,16 +13,16 @@ pub struct TouchCommand {
 
 #[derive(Debug, Parser)]
 pub struct MoveCommand {
-    /// The file to move
-    pub from: PathBuf,
+    /// The node to move
+    pub from: OsString,
     /// The destination of the file
-    pub to: PathBuf,
+    pub to: OsString,
 }
 
 #[derive(Debug, Parser)]
 pub struct MakeDirCommand {
     /// The directory to create
-    pub dir: PathBuf,
+    pub dir: OsString,
     /// Create all parent directories if they don't exist
     #[arg(short, long)]
     pub parents: bool,
@@ -31,7 +31,7 @@ pub struct MakeDirCommand {
 #[derive(Debug, Parser)]
 pub struct RemoveCommand {
     /// The file or path to remove
-    pub file_or_dir: PathBuf,
+    pub file_or_dir: OsString,
     /// If true, remove all files in the directory
     #[arg(short, long)]
     pub recursive: bool,
@@ -40,7 +40,7 @@ pub struct RemoveCommand {
 #[derive(Debug, Parser)]
 pub struct HeadCommand {
     /// The file to read
-    pub file: PathBuf,
+    pub file: OsString,
     /// The number of lines to start reading from the beginning
     #[arg(short, long, default_value = "0")]
     pub start: u32,
@@ -52,7 +52,7 @@ pub struct HeadCommand {
 #[derive(Debug, Parser)]
 pub struct ListCommand {
     /// The directory to list
-    pub dir: Option<PathBuf>,
+    pub dir: Option<OsString>,
     /// If true, list all files including hidden files
     #[arg(short, long)]
     pub all: bool,
@@ -61,7 +61,7 @@ pub struct ListCommand {
 #[derive(Debug, Parser)]
 pub struct SortCommand {
     /// The file to sort
-    pub file: PathBuf,
+    pub file: OsString,
     /// If true, sort the file in reverse order
     #[arg(short, long)]
     pub inverse_order: bool,
@@ -70,10 +70,11 @@ pub struct SortCommand {
 #[derive(Debug, Parser)]
 pub struct CatCommand {
     /// The files to concatenate
-    pub files: Vec<PathBuf>,
+    #[arg(required=true, num_args=1..)]
+    pub files: Vec<OsString>,
     /// The output file to write the concatenated content to
     #[arg(short, long)]
-    pub output_file: Option<PathBuf>,
+    pub output_file: Option<OsString>,
 }
 
 #[derive(Debug, Parser)]
