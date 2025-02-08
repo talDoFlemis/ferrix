@@ -1,6 +1,7 @@
 pub mod cli;
 mod complete_command;
 mod error;
+pub mod ext_arr;
 pub mod fs;
 pub mod mem;
 pub mod parser;
