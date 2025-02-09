@@ -2,7 +2,7 @@ use clap::Parser;
 use ferrix::{
     cli::FerrixCLI,
     fs::BasicFS,
-    repl_v2::{FerrixPrompt, FerrixPromptSegment, ReplV2},
+    repl_v2::{FerrixPromptSegment, ReplV2},
     vdisk::VDisk,
 };
 use miette::Result;
@@ -17,9 +17,7 @@ fn main() -> Result<()> {
     let system = ferrix::system::BasicSystem::new(basic_fs);
     let segment = FerrixPromptSegment::WorkingDirectory;
 
-    let prompt = FerrixPrompt::new(system.clone(), segment);
-
-    ReplV2::run(system, prompt)?;
+    ReplV2::run(system, segment)?;
 
     Ok(())
 }
