@@ -59,6 +59,12 @@ pub struct ListCommand {
 }
 
 #[derive(Debug, Parser)]
+pub struct ChangeDirCommand {
+    /// The path to change working directory to
+    pub path: Option<OsString>,
+}
+
+#[derive(Debug, Parser)]
 pub struct SortCommand {
     /// The file to sort
     pub file: OsString,
@@ -110,4 +116,7 @@ pub enum CompleteCommand {
     Cat(CatCommand),
     /// Exit the ferrix repl
     Exit(ExitCommand),
+    /// Change the current working directory
+    #[command(name = "cd")]
+    ChangeDir(ChangeDirCommand),
 }
