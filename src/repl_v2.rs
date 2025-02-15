@@ -1,5 +1,5 @@
-use std::borrow::{Borrow, Cow};
-use std::cell::RefCell;
+use std::borrow::Cow;
+use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 
 use miette::Result;
@@ -23,24 +23,30 @@ pub enum FerrixPromptSegment {
     Empty,
 }
 
-pub struct FerrixPrompt<S: System + Send + Sync> {
+pub struct FerrixPrompt {
     segment: FerrixPromptSegment,
-    system: S,
+    current_working_dir: Arc<RwLock<PathBuf>>,
 }
 
-impl<S: System + Send + Sync> FerrixPrompt<S> {
-    pub fn new(system: S, segment: FerrixPromptSegment) -> Self {
-        Self { segment, system }
+impl FerrixPrompt {
+    pub fn new(current_working_dir: Arc<RwLock<PathBuf>>, segment: FerrixPromptSegment) -> Self {
+        Self {
+            segment,
+            current_working_dir,
+        }
     }
 }
 
-impl<S: System + Send + Sync> FerrixPrompt<S> {
+impl FerrixPrompt {
     fn render_prompt_segment(&self) -> Cow<str> {
         match &self.segment {
             FerrixPromptSegment::Basic(s) => s.into(),
             FerrixPromptSegment::WorkingDirectory => Cow::Owned(format!(
                 "{}{}",
-                self.system.get_cwd().unwrap_or_default().to_string_lossy(),
+                self.current_working_dir
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .display(),
                 "@ferrix",
             )),
             FerrixPromptSegment::Empty => Cow::Borrowed(""),
@@ -48,7 +54,7 @@ impl<S: System + Send + Sync> FerrixPrompt<S> {
     }
 }
 
-impl<S: System + Send + Sync> Prompt for FerrixPrompt<S> {
+impl Prompt for FerrixPrompt {
     fn render_prompt_left(&self) -> std::borrow::Cow<str> {
         self.render_prompt_segment()
     }
@@ -85,11 +91,20 @@ impl<S: System + Send + Sync> Prompt for FerrixPrompt<S> {
 
 pub struct ReplV2 {}
 
+#[cfg(target_family = "unix")]
+pub const DEFAULT_CURRENT_WORKING_DIR: &str = "/";
+
+#[cfg(target_family = "windows")]
+pub const DEFAULT_CURRENT_WORKING_DIR: &str = "C:\\";
+
 impl ReplV2 {
-    pub fn run<S>(system: S, prompt: FerrixPrompt<S>) -> Result<()>
+    pub fn run<S>(system: S, segment: FerrixPromptSegment) -> Result<()>
     where
         S: System + Send + Sync + 'static,
     {
+        let shared_path = Arc::new(RwLock::new(PathBuf::from(DEFAULT_CURRENT_WORKING_DIR)));
+
+        let prompt = FerrixPrompt::new(shared_path.clone(), segment);
         let rl = ClapEditor::<CompleteCommand>::builder()
             .with_prompt(Box::new(prompt))
             .build();
@@ -99,6 +114,17 @@ impl ReplV2 {
                 if let Err(e) = system.exit(&cmd) {
                     eprintln!("Error exiting: {:?}", e);
                 }
+            }
+            CompleteCommand::ChangeDir(cmd) => {
+                let mut guard = shared_path
+                    .write()
+                    .expect("Failed to write current working directory");
+                let new_path = PathBuf::from(
+                    cmd.path
+                        .unwrap_or(DEFAULT_CURRENT_WORKING_DIR.into())
+                        .clone(),
+                );
+                guard.push(new_path);
             }
             _ => eprintln!("Command not implemented: {:?}", cmd),
         });
