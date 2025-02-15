@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use clean_path::Clean;
 
 use miette::Result;
 
@@ -125,6 +126,9 @@ impl ReplV2 {
                         .clone(),
                 );
                 guard.push(new_path);
+                let cleared_path = guard.clean();
+                guard.clear();
+                guard.push(cleared_path);
             }
             _ => eprintln!("Command not implemented: {:?}", cmd),
         });
