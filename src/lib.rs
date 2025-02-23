@@ -7,6 +7,7 @@ pub mod mem;
 pub mod parser;
 pub mod repl;
 pub mod repl_v2;
+pub mod simple_ext4;
 pub mod sort;
 pub mod system;
 pub mod vdisk;
