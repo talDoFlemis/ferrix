@@ -27,6 +27,8 @@ libc = "0.2.170"
 fuser = { version = "0.15.1", features = ["serde", "serializable"] }
 mmap = "0.1.1"
 memmap = "0.7.0"
+tracing = "0.1.41"
+tracing-subscriber = "0.3.19"
 
 [dev-dependencies]
 tempfile = "3.16.0"
