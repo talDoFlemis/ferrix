@@ -5,7 +5,7 @@ use ferrix::{
     repl_v2::{FerrixPromptSegment, ReplV2},
     vdisk::VDisk,
 };
-use miette::Result;
+use anyhow::Result;
 
 fn main() -> Result<()> {
     let cli = FerrixCLI::parse();
