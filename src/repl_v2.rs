@@ -99,7 +99,7 @@ pub const DEFAULT_CURRENT_WORKING_DIR: &str = "/";
 pub const DEFAULT_CURRENT_WORKING_DIR: &str = "C:\\";
 
 impl ReplV2 {
-    pub fn run<S>(system: S, segment: FerrixPromptSegment) -> Result<()>
+    pub fn run<S>(system: S, segment: FerrixPromptSegment) -> anyhow::Result<()>
     where
         S: System + Send + Sync + 'static,
     {
