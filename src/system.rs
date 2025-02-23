@@ -34,8 +34,6 @@ pub struct ListCommandOutput {
 ///
 /// This trait is used to define the interface for a system that can execute commands.
 pub trait System {
-    /// Get the current working directory
-    fn get_cwd(&self) -> Result<PathBuf>;
     /// Create a new file
     fn touch(&mut self, cmd: &TouchCommand) -> Result<()>;
     /// Move a file from one location to another
@@ -74,10 +72,6 @@ where
 }
 
 impl<F: Filesystem> System for BasicSystem<F> {
-    fn get_cwd(&self) -> Result<PathBuf> {
-        Ok(PathBuf::from("/path/to/cwd"))
-    }
-
     fn touch(&mut self, cmd: &TouchCommand) -> Result<()> {
         todo!()
     }
