@@ -76,7 +76,7 @@ pub struct SortCommand {
 #[derive(Debug, Parser)]
 pub struct CatCommand {
     /// The files to concatenate
-    #[arg(required=true, num_args=1..)]
+    #[arg(required=true, num_args=2..)]
     pub files: Vec<OsString>,
     /// The output file to write the concatenated content to
     #[arg(short, long)]
