@@ -2,12 +2,14 @@ use std::io::{Cursor, Seek};
 use std::path::PathBuf;
 use std::process::exit;
 
-use miette::{IntoDiagnostic, Result};
+use anyhow::Result;
+use thiserror::Error;
 
 use crate::complete_command::{
     CatCommand, ExitCommand, HeadCommand, ListCommand, MakeDirCommand, MoveCommand, RemoveCommand,
     SortCommand, TouchCommand,
 };
+use crate::error;
 use crate::ext_arr::ExtArr;
 use crate::fs::Filesystem;
 use crate::mem::size::MB;
@@ -28,6 +30,20 @@ pub struct ListCommandOutput {
     pub nodes: Vec<NodeInfo>,
     pub total_disk_space_in_bytes: VDiskSize,
     pub remaining_disk_space_in_bytes: VDiskSize,
+}
+
+#[derive(Debug, Error, Clone, Eq, PartialEq)]
+pub enum SystemError {
+    #[error("No such file or directory")]
+    NoSuchFileOrDirectory,
+    #[error("Directory not found")]
+    DirectoryNotFound,
+    #[error("File already exists")]
+    FileAlreadyExists,
+    #[error("File is a directory")]
+    IsDirectory,
+    #[error("Too little files to concatenate")]
+    TooLittleFiles,
 }
 
 /// A system that can execute commands
@@ -103,14 +119,13 @@ impl<F: Filesystem> System for BasicSystem<F> {
         // TODO: change this implementation to use the file system
         let v = [10, 5, 3, 7, 1, 9, 2, 6, 8, 4];
 
-        arr.write(&v).into_diagnostic()?;
-        arr.flush().into_diagnostic()?;
-        arr.rewind().into_diagnostic()?;
+        arr.write(&v)?;
+        arr.flush()?;
+        arr.rewind()?;
 
         ExtSorter::sort(&mut arr, mem.as_mut(), |_| {
             Ok(ExtArr::new(Cursor::new(Vec::new())))
-        })
-        .into_diagnostic()?;
+        })?;
 
         Ok(())
     }
