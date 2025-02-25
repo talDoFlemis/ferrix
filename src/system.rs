@@ -21,11 +21,14 @@ pub const DEFAULT_MEM_SIZE: usize = MB * 2;
 
 pub type Number = u16;
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct NodeInfo {
     pub name: String,
     pub size: VDiskSize,
+    pub is_dir: bool,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ListCommandOutput {
     pub nodes: Vec<NodeInfo>,
     pub total_disk_space_in_bytes: VDiskSize,
