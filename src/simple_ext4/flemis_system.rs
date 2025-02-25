@@ -1,13 +1,14 @@
 use anyhow::{bail, Result};
 use clean_path::Clean;
-use fuser::MountOption;
+use fuser::{BackgroundSession, MountOption};
 use std::{
     ffi::OsString,
     io::{BufRead, Write},
     os::unix::fs::MetadataExt,
     path::PathBuf,
     process::exit,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
+    thread,
 };
 
 use crate::{
@@ -18,7 +19,7 @@ use crate::{
 #[derive(Debug)]
 pub struct FlemisSystem {
     mount_point: PathBuf,
-    session: Arc<Mutex<fuser::BackgroundSession>>,
+    session: Arc<Mutex<BackgroundSession>>,
 }
 
 impl FlemisSystem {
@@ -26,17 +27,12 @@ impl FlemisSystem {
         let fs = super::fs_in_fs::FSInFS::new("/tmp/storage".into(), true, false);
         let options = vec![
             MountOption::FSName("flemis".to_string()),
-            MountOption::AutoUnmount,
-            MountOption::AllowOther,
         ];
 
-        let session = fuser::spawn_mount2(fs, mount_point.clone(), &options)?;
-        let session = Arc::new(Mutex::new(session));
+        let bg_session = fuser::spawn_mount2(fs, mount_point.clone(), &options)?;
+        let session = Arc::new(Mutex::new(bg_session));
 
-        Ok(Self {
-            mount_point,
-            session,
-        })
+        Ok(Self { mount_point, session })
     }
 
     fn convert_path_to_vdisk_path(&self, path: &PathBuf) -> PathBuf {
@@ -44,9 +40,9 @@ impl FlemisSystem {
         let path = PathBuf::from("/").join(path).clean();
         let path = path.strip_prefix("/").unwrap_or(path.as_path());
         vdisk_path.push(path);
-        vdisk_path = vdisk_path.clean();
 
-        vdisk_path
+
+        vdisk_path.clean()
     }
 
     fn stat(&self, path: &PathBuf) -> anyhow::Result<std::fs::Metadata> {
@@ -55,17 +51,13 @@ impl FlemisSystem {
 
         Ok(metadata)
     }
-
-    fn exists(&self, path: &PathBuf) -> bool {
-        path.exists()
-    }
 }
 
 impl System for FlemisSystem {
     fn touch(&mut self, cmd: &crate::complete_command::TouchCommand) -> Result<()> {
         let file = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.file));
 
-        if self.exists(&file) {
+        if file.exists() {
             bail!(SystemError::FileAlreadyExists);
         }
 
@@ -85,7 +77,7 @@ impl System for FlemisSystem {
     fn mv(&mut self, cmd: &crate::complete_command::MoveCommand) -> Result<()> {
         let file_to_move = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.from));
 
-        if !self.exists(&file_to_move) {
+        if !file_to_move.exists() {
             bail!(SystemError::NoSuchFileOrDirectory);
         }
 
@@ -97,7 +89,7 @@ impl System for FlemisSystem {
     fn make_dir(&mut self, cmd: &crate::complete_command::MakeDirCommand) -> Result<()> {
         let dir = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.dir));
 
-        if self.exists(&dir) {
+        if dir.exists() {
             bail!(SystemError::FileAlreadyExists);
         }
 
@@ -108,7 +100,7 @@ impl System for FlemisSystem {
     fn remove(&mut self, cmd: &crate::complete_command::RemoveCommand) -> Result<()> {
         let file_or_dir = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.file_or_dir));
 
-        if !self.exists(&file_or_dir) {
+        if !file_or_dir.exists() {
             bail!(SystemError::NoSuchFileOrDirectory);
         }
 
@@ -129,7 +121,7 @@ impl System for FlemisSystem {
     ) -> Result<Vec<crate::system::Number>> {
         let file = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.file));
 
-        if !self.exists(&file) {
+        if !file.exists() {
             bail!(SystemError::NoSuchFileOrDirectory);
         }
 
@@ -146,7 +138,7 @@ impl System for FlemisSystem {
         let path = PathBuf::from(cmd.dir.as_ref().unwrap_or(&OsString::from("/")));
         let path = self.convert_path_to_vdisk_path(&path);
 
-        if !self.exists(&path) {
+        if !path.exists() {
             bail!(SystemError::NoSuchFileOrDirectory);
         }
 
@@ -208,7 +200,7 @@ impl System for FlemisSystem {
 
         for file in &cmd.files {
             let path = self.convert_path_to_vdisk_path(&PathBuf::from(file));
-            if !self.exists(&path) {
+            if !path.exists() {
                 bail!(SystemError::NoSuchFileOrDirectory);
             }
 
