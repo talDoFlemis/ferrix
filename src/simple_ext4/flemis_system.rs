@@ -44,13 +44,6 @@ impl FlemisSystem {
 
         vdisk_path.clean()
     }
-
-    fn stat(&self, path: &PathBuf) -> anyhow::Result<std::fs::Metadata> {
-        let vdisk_path = self.convert_path_to_vdisk_path(path);
-        let metadata = std::fs::metadata(vdisk_path)?;
-
-        Ok(metadata)
-    }
 }
 
 impl System for FlemisSystem {
@@ -145,7 +138,7 @@ impl System for FlemisSystem {
         let mut nodes = Vec::new();
 
         if !path.is_dir() {
-            let metadata = self.stat(&path)?;
+            let metadata = path.metadata()?;
             let file_name = path.file_name().unwrap().to_str().unwrap().to_string();
             let size = metadata.size();
 
