@@ -14,10 +14,10 @@ fn main() -> Result<()> {
 
     let basic_fs = BasicFS::new(vdisk);
 
-    let system = ferrix::system::BasicSystem::new(basic_fs);
+    let mut system = ferrix::system::BasicSystem::new(basic_fs);
     let segment = FerrixPromptSegment::WorkingDirectory;
 
-    ReplV2::run(system, segment)?;
+    ReplV2::run(&mut system, segment)?;
 
     Ok(())
 }
