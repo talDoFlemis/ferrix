@@ -139,7 +139,9 @@ impl ReplV2 {
                     .to_os_string();
 
                 if cmd.dir.is_some() {
-                    dir = cmd.dir.unwrap();
+                    let path = PathBuf::from(cmd.dir.as_ref().unwrap());
+                    let cwd = PathBuf::from(dir);
+                    dir = cwd.join(path).clean().into_os_string().to_os_string();
                 };
 
                 let cmd = ListCommand {
