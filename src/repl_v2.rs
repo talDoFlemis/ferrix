@@ -1,14 +1,14 @@
+use clean_path::Clean;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use clean_path::Clean;
-
-use miette::Result;
 
 use clap_repl::reedline::{Prompt, PromptHistorySearchStatus};
 use clap_repl::ClapEditor;
 
-use crate::complete_command::CompleteCommand;
+use crate::complete_command::{
+    CatCommand, CompleteCommand, HeadCommand, ListCommand, MakeDirCommand, MoveCommand, RemoveCommand, SortCommand, TouchCommand
+};
 use crate::system::System;
 
 static DEFAULT_PROMPT_INDICATOR: &str = "$ ";
@@ -99,7 +99,7 @@ pub const DEFAULT_CURRENT_WORKING_DIR: &str = "/";
 pub const DEFAULT_CURRENT_WORKING_DIR: &str = "C:\\";
 
 impl ReplV2 {
-    pub fn run<S>(system: S, segment: FerrixPromptSegment) -> anyhow::Result<()>
+    pub fn run<S>(system: &mut S, segment: FerrixPromptSegment) -> anyhow::Result<()>
     where
         S: System + Send + Sync + 'static,
     {
@@ -130,7 +130,166 @@ impl ReplV2 {
                 guard.clear();
                 guard.push(cleared_path);
             }
-            _ => eprintln!("Command not implemented: {:?}", cmd),
+            CompleteCommand::List(cmd) => {
+                let mut dir = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone()
+                    .into_os_string()
+                    .to_os_string();
+
+                if cmd.dir.is_some() {
+                    dir = cmd.dir.unwrap();
+                };
+
+                let cmd = ListCommand {
+                    dir: Some(dir),
+                    all: cmd.all,
+                };
+                match system.list(&cmd) {
+                    Ok(output) => {
+                        for entry in output.nodes {
+                            println!("{:?}", entry);
+                        }
+                    }
+                    Err(e) => eprintln!("Error listing: {:?}", e),
+                }
+            }
+            CompleteCommand::Touch(cmd) => {
+                let mut cwd = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone();
+
+                cwd.push(PathBuf::from(cmd.file));
+                let cwd = cwd.clean();
+
+                let cmd = TouchCommand {
+                    file: cwd.into_os_string().to_os_string(),
+                    number_of_integers: cmd.number_of_integers,
+                };
+
+                if let Err(e) = system.touch(&cmd) {
+                    eprintln!("Error touching: {:?}", e);
+                }
+            }
+            CompleteCommand::MakeDir(cmd) => {
+                let mut cwd = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone();
+
+                cwd.push(PathBuf::from(cmd.dir));
+                let cwd = cwd.clean();
+
+                let cmd = MakeDirCommand {
+                    dir: cwd.into_os_string().to_os_string(),
+                    parents: cmd.parents,
+                };
+                if let Err(e) = system.make_dir(&cmd) {
+                    eprintln!("Error making directory: {:?}", e);
+                }
+            }
+            CompleteCommand::Head(cmd) => {
+                let mut cwd = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone();
+
+                cwd.push(PathBuf::from(cmd.file));
+                let cwd = cwd.clean();
+
+                let cmd = HeadCommand {
+                    file: cwd.into_os_string().to_os_string(),
+                    start: cmd.start,
+                    end: cmd.end,
+                };
+                if let Err(e) = system.head(&cmd) {
+                    eprintln!("Error heading: {:?}", e);
+                }
+            }
+            CompleteCommand::Cat(cmd) => {
+                let cwd = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone();
+
+                let mut files = Vec::new();
+
+                for file in cmd.files {
+                    let file = cwd.join(PathBuf::from(file));
+                    files.push(file.into_os_string().to_os_string());
+                }
+
+                let cmd = CatCommand {
+                    files: files,
+                    output_file: cmd.output_file,
+                };
+
+                if let Err(e) = system.cat(&cmd) {
+                    eprintln!("Error catting: {:?}", e);
+                }
+            }
+            CompleteCommand::Remove(cmd) => {
+                let mut cwd = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone();
+
+                cwd.push(PathBuf::from(cmd.file_or_dir));
+                let cwd = cwd.clean();
+
+                let cmd = RemoveCommand {
+                    file_or_dir: cwd.into_os_string().to_os_string(),
+                    recursive: cmd.recursive,
+                };
+                if let Err(e) = system.remove(&cmd) {
+                    eprintln!("Error removing: {:?}", e);
+                }
+            }
+            CompleteCommand::Move(cmd) => {
+                let cwd = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone();
+
+                let to = cwd
+                    .join(PathBuf::from(cmd.from))
+                    .clean()
+                    .into_os_string()
+                    .to_os_string();
+                let from = cwd
+                    .join(PathBuf::from(cmd.to))
+                    .clean()
+                    .into_os_string()
+                    .to_os_string();
+
+                let cmd = MoveCommand { from, to };
+
+                if let Err(e) = system.mv(&cmd) {
+                    eprintln!("Error moving: {:?}", e);
+                }
+            }
+            CompleteCommand::Sort(cmd) => {
+                let cwd = shared_path
+                    .read()
+                    .expect("Failed to read current working directory")
+                    .clone();
+
+                let file = cwd
+                    .join(PathBuf::from(cmd.file))
+                    .clean()
+                    .into_os_string()
+                    .to_os_string();
+
+                let cmd = SortCommand {
+                    file,
+                    inverse_order: cmd.inverse_order,
+                };
+                if let Err(e) = system.sort(&cmd) {
+                    eprintln!("Error sorting: {:?}", e);
+                }
+            }
         });
 
         Ok(())
