@@ -1,7 +1,7 @@
 pub mod fs;
-pub mod mkfs;
-pub mod system;
+pub mod flemis_system;
 pub mod types;
+pub mod fs_in_fs;
 use std::time::{self, SystemTime};
 
 const FERRIX_MAGIC: u32 = 0x64627a;
