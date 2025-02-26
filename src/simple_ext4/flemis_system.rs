@@ -2,11 +2,12 @@ use anyhow::{bail, Result};
 use byte_unit::Byte;
 use clean_path::Clean;
 use fuser::{BackgroundSession, MountOption};
+use memmap::{Mmap, MmapMut, MmapOptions};
 use rand::distr::Uniform;
 use rand::Rng;
 use std::{
     ffi::OsString,
-    io::{Read, Write},
+    io::{Cursor, Read, Write},
     os::unix::fs::MetadataExt,
     path::PathBuf,
     process::exit,
@@ -131,19 +132,30 @@ impl System for FlemisSystem {
         }
 
         let file = std::fs::File::open(file)?;
-
         let mut reader = std::io::BufReader::new(file);
-        let mut buffer = Vec::new();
-        reader.read_to_end(&mut buffer)?;
-        let deserialized: Vec<Number> = bincode::deserialize(&buffer)?;
 
-        if end >= deserialized.len() {
+        // First read the vector length from bincode header
+        let vec_len: u64 = bincode::deserialize_from(&mut reader)?;
+
+        if end >= vec_len as usize {
             bail!(SystemError::EndGreaterThanFileSize);
         }
 
-        let subset = deserialized[start..=end].to_vec();
+        // Skip elements before start
+        for _ in 0..start {
+            let _: Number = bincode::deserialize_from(&mut reader)?;
+        }
 
-        Ok(subset)
+        // Read only the required elements
+        let elements_to_read = end - start + 1;
+        let mut result = Vec::with_capacity(elements_to_read);
+
+        for _ in 0..elements_to_read {
+            let num: Number = bincode::deserialize_from(&mut reader)?;
+            result.push(num);
+        }
+
+        Ok(result)
     }
 
     fn list(
