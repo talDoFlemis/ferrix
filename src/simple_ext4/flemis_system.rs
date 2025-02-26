@@ -304,13 +304,41 @@ impl System for FlemisSystem {
         )));
 
         let new_file = std::fs::File::create(&new_file_path)?;
-
         let mut writer = std::io::BufWriter::new(new_file);
 
-        for file in files {
+        let total_length: u64 = 0;
+        bincode::serialize_into(&mut writer, &total_length)?;
+
+        let mut total_numbers = 0u64;
+        for file_path in &cmd.files {
+            let path = self.convert_path_to_vdisk_path(&PathBuf::from(file_path));
+            if !path.exists() {
+                bail!(SystemError::NoSuchFileOrDirectory);
+            }
+
+            if path.is_dir() {
+                bail!(SystemError::IsDirectory);
+            }
+
+            let file = std::fs::File::open(path)?;
             let mut reader = std::io::BufReader::new(file);
-            std::io::copy(&mut reader, &mut writer)?;
+
+            // Read length of current file
+            let file_length: u64 = bincode::deserialize_from(&mut reader)?;
+            total_numbers += file_length;
+
+            // Stream numbers directly from input to output
+            for _ in 0..file_length {
+                let number: Number = bincode::deserialize_from(&mut reader)?;
+                bincode::serialize_into(&mut writer, &number)?;
+            }
         }
+
+        // Go back and update the total length
+        writer.flush()?;
+        writer.seek(std::io::SeekFrom::Start(0))?;
+        bincode::serialize_into(&mut writer, &total_numbers)?;
+        writer.flush()?;
 
         Ok(new_file_path)
     }
