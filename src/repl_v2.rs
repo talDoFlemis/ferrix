@@ -1,15 +1,15 @@
 use clean_path::Clean;
-use tabled::Table;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use tabled::Table;
 
 use clap_repl::reedline::{Prompt, PromptHistorySearchStatus};
 use clap_repl::ClapEditor;
 
 use crate::complete_command::{
-    CatCommand, CompleteCommand, HeadCommand, ListCommand, MakeDirCommand, MoveCommand,
-    RemoveCommand, SortCommand, TouchCommand,
+    CatCommand, ChangeDirCommand, CompleteCommand, HeadCommand, ListCommand, MakeDirCommand,
+    MoveCommand, RemoveCommand, SortCommand, TouchCommand,
 };
 use crate::system::System;
 
@@ -112,6 +112,10 @@ impl ReplV2 {
             .with_prompt(Box::new(prompt))
             .build();
 
+        system.chdir(&ChangeDirCommand {
+            path: Some(DEFAULT_CURRENT_WORKING_DIR.into()),
+        })?;
+
         rl.repl(|cmd| match cmd {
             CompleteCommand::Exit(cmd) => {
                 if let Err(e) = system.exit(&cmd) {
@@ -122,6 +126,8 @@ impl ReplV2 {
                 let mut guard = shared_path
                     .write()
                     .expect("Failed to write current working directory");
+
+                let original_path = guard.clone();
                 let new_path = PathBuf::from(
                     cmd.path
                         .unwrap_or(DEFAULT_CURRENT_WORKING_DIR.into())
@@ -129,8 +135,19 @@ impl ReplV2 {
                 );
                 guard.push(new_path);
                 let cleared_path = guard.clean();
-                guard.clear();
                 guard.push(cleared_path);
+
+                let cmd = ChangeDirCommand {
+                    path: Some(guard.clone().into_os_string().to_os_string()),
+                };
+
+                match system.chdir(&cmd) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        *guard = original_path;
+                        eprintln!("Error changing directory: {:?}", e);
+                    }
+                }
             }
             CompleteCommand::List(cmd) => {
                 let mut dir = shared_path
