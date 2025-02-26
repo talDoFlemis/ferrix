@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use std::process::exit;
 
 use anyhow::Result;
+use tabled::Tabled;
 use thiserror::Error;
 
 use crate::complete_command::{
@@ -21,7 +22,7 @@ pub const DEFAULT_MEM_SIZE: usize = MB * 2;
 
 pub type Number = u16;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Tabled)]
 pub struct NodeInfo {
     pub name: String,
     pub size: VDiskSize,

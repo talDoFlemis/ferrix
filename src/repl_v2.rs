@@ -1,4 +1,5 @@
 use clean_path::Clean;
+use tabled::Table;
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
@@ -7,7 +8,8 @@ use clap_repl::reedline::{Prompt, PromptHistorySearchStatus};
 use clap_repl::ClapEditor;
 
 use crate::complete_command::{
-    CatCommand, CompleteCommand, HeadCommand, ListCommand, MakeDirCommand, MoveCommand, RemoveCommand, SortCommand, TouchCommand
+    CatCommand, CompleteCommand, HeadCommand, ListCommand, MakeDirCommand, MoveCommand,
+    RemoveCommand, SortCommand, TouchCommand,
 };
 use crate::system::System;
 
@@ -150,9 +152,14 @@ impl ReplV2 {
                 };
                 match system.list(&cmd) {
                     Ok(output) => {
-                        for entry in output.nodes {
-                            println!("{:?}", entry);
-                        }
+                        let len = output.nodes.len();
+                        let total_size = output.total_disk_space_in_bytes;
+                        let remaining_size = output.remaining_disk_space_in_bytes;
+                        let table = Table::new(output.nodes).to_string();
+                        println!("{table}");
+                        println!("Total: {len} nodes");
+                        println!("Total disk size: {total_size} bytes");
+                        println!("Remaining disk size: {remaining_size} bytes");
                     }
                     Err(e) => eprintln!("Error listing: {:?}", e),
                 }
@@ -206,8 +213,13 @@ impl ReplV2 {
                     start: cmd.start,
                     end: cmd.end,
                 };
-                if let Err(e) = system.head(&cmd) {
-                    eprintln!("Error heading: {:?}", e);
+                match system.head(&cmd) {
+                    Ok(numbers) => {
+                        for number in &numbers {
+                            println!("{}", number);
+                        }
+                    }
+                    Err(e) => eprintln!("Error heading: {:?}", e),
                 }
             }
             CompleteCommand::Cat(cmd) => {
