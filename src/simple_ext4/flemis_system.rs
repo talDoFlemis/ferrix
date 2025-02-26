@@ -6,9 +6,9 @@ use memmap::{Mmap, MmapMut, MmapOptions};
 use rand::distr::Uniform;
 use rand::Rng;
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     io::{BufReader, Cursor, Read, Seek, Write},
-    os::unix::fs::MetadataExt,
+    os::unix::{ffi::OsStrExt, fs::MetadataExt},
     path::PathBuf,
     process::exit,
     sync::{Arc, Mutex},
@@ -270,7 +270,7 @@ impl System for FlemisSystem {
     fn cat(&self, cmd: &crate::complete_command::CatCommand) -> Result<PathBuf> {
         let mut files = Vec::with_capacity(cmd.files.len());
 
-        if files.len() < 2 {
+        if files.capacity() < 2 {
             bail!(SystemError::TooLittleFiles);
         }
 
@@ -291,7 +291,7 @@ impl System for FlemisSystem {
         let first_file = cmd.files.first().expect("expected the first file");
         let first_file = self.convert_path_to_vdisk_path(&PathBuf::from(first_file));
 
-        let extension = first_file.extension().unwrap_or_default();
+        let extension = first_file.extension().unwrap_or(OsStr::new("txt"));
 
         let new_file_path = self.convert_path_to_vdisk_path(&PathBuf::from(format!(
             "{}.{}",
