@@ -7,8 +7,8 @@ use tabled::Tabled;
 use thiserror::Error;
 
 use crate::complete_command::{
-    CatCommand, ExitCommand, HeadCommand, ListCommand, MakeDirCommand, MoveCommand, RemoveCommand,
-    SortCommand, TouchCommand,
+    CatCommand, ChangeDirCommand, ExitCommand, HeadCommand, ListCommand, MakeDirCommand,
+    MoveCommand, RemoveCommand, SortCommand, TouchCommand,
 };
 use crate::error;
 use crate::ext_arr::ExtArr;
@@ -76,6 +76,9 @@ pub trait System {
     fn cat(&self, cmd: &CatCommand) -> Result<PathBuf>;
     /// Exit the system with the given exit code
     fn exit(&self, cmd: &ExitCommand) -> Result<()>;
+    fn chdir(&self, cmd: &ChangeDirCommand) -> Result<()> {
+        todo!()
+    }
 }
 
 pub struct BasicSystem<F>

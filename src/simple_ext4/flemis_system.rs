@@ -259,4 +259,19 @@ impl System for FlemisSystem {
     fn exit(&self, cmd: &crate::complete_command::ExitCommand) -> Result<()> {
         exit(cmd.code)
     }
+
+    fn chdir(&self, cmd: &crate::complete_command::ChangeDirCommand) -> Result<()> {
+        let path = cmd.path.as_ref().map(PathBuf::from);
+        let path = path.unwrap_or_else(|| PathBuf::from("/"));
+
+        let path = self.convert_path_to_vdisk_path(&path);
+
+        if !path.exists() {
+            bail!(SystemError::DirectoryNotFound);
+        }
+
+        std::env::set_current_dir(path)?;
+
+        Ok(())
+    }
 }
