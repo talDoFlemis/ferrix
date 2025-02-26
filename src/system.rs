@@ -47,6 +47,10 @@ pub enum SystemError {
     IsDirectory,
     #[error("Too little files to concatenate")]
     TooLittleFiles,
+    #[error("Start is greater than end")]
+    StartGreaterThanEnd,
+    #[error("End greater than file size")]
+    EndGreaterThanFileSize,
 }
 
 /// A system that can execute commands

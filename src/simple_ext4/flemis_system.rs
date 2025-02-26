@@ -1,18 +1,20 @@
 use anyhow::{bail, Result};
 use clean_path::Clean;
 use fuser::{BackgroundSession, MountOption};
+use rand::distr::Uniform;
+use rand::Rng;
 use std::{
     ffi::OsString,
-    io::{BufRead, Write},
+    io::{Read, Write},
     os::unix::fs::MetadataExt,
     path::PathBuf,
     process::exit,
     sync::{Arc, Mutex},
-    thread,
+    u16, usize,
 };
 
 use crate::{
-    system::{ListCommandOutput, System, SystemError},
+    system::{ListCommandOutput, Number, System, SystemError},
     vdisk::{self, VDisk, VDiskSize},
 };
 
@@ -25,14 +27,15 @@ pub struct FlemisSystem {
 impl FlemisSystem {
     pub fn new(vdisk: VDisk, mount_point: PathBuf) -> Result<Self> {
         let fs = super::fs_in_fs::FSInFS::new("/tmp/storage".into(), true, false);
-        let options = vec![
-            MountOption::FSName("flemis".to_string()),
-        ];
+        let options = vec![MountOption::FSName("flemis".to_string())];
 
         let bg_session = fuser::spawn_mount2(fs, mount_point.clone(), &options)?;
         let session = Arc::new(Mutex::new(bg_session));
 
-        Ok(Self { mount_point, session })
+        Ok(Self {
+            mount_point,
+            session,
+        })
     }
 
     fn convert_path_to_vdisk_path(&self, path: &PathBuf) -> PathBuf {
@@ -40,7 +43,6 @@ impl FlemisSystem {
         let path = PathBuf::from("/").join(path).clean();
         let path = path.strip_prefix("/").unwrap_or(path.as_path());
         vdisk_path.push(path);
-
 
         vdisk_path.clean()
     }
@@ -57,11 +59,14 @@ impl System for FlemisSystem {
         let file = std::fs::File::create(file)?;
         let mut writer = std::io::BufWriter::new(file);
 
-        for _ in 0..cmd.number_of_integers {
-            //TODO: use bitvec and write entire buffer
-            writer.write_all(b"0")?;
-        }
+        let mut rng = rand::rng();
+        let data: Vec<u16> = (0..cmd.number_of_integers)
+            .map(|_| rng.random_range(0..=u16::MAX))
+            .collect();
 
+        let encoded: Vec<u8> = bincode::serialize(&data)?;
+
+        writer.write_all(&encoded)?;
         writer.flush()?;
 
         Ok(())
@@ -118,10 +123,26 @@ impl System for FlemisSystem {
             bail!(SystemError::NoSuchFileOrDirectory);
         }
 
-        let file = std::fs::File::open(file)?;
-        let mut reader = std::io::BufReader::new(file);
+        let start: usize = cmd.start.try_into()?;
+        let end: usize = cmd.end.try_into()?;
+        if start > end {
+            bail!(SystemError::StartGreaterThanEnd);
+        }
 
-        todo!()
+        let file = std::fs::File::open(file)?;
+
+        let mut reader = std::io::BufReader::new(file);
+        let mut buffer = Vec::new();
+        reader.read_to_end(&mut buffer)?;
+        let deserialized: Vec<Number> = bincode::deserialize(&buffer)?;
+
+        if end >= deserialized.len() {
+            bail!(SystemError::EndGreaterThanFileSize);
+        }
+
+        let subset = deserialized[start..=end].to_vec();
+
+        Ok(subset)
     }
 
     fn list(
@@ -170,8 +191,11 @@ impl System for FlemisSystem {
             }
         }
 
-        let total_disk_space_in_bytes = 0;
-        let remaining_disk_space_in_bytes = 0;
+        let stat = nix::sys::statfs::statfs(&self.mount_point)?;
+
+        let total_disk_space_in_bytes = (stat.blocks() * (stat.block_size() as u64)).try_into()?;
+        let remaining_disk_space_in_bytes =
+            (stat.blocks_available() * (stat.block_size() as u64)).try_into()?;
 
         Ok(ListCommandOutput {
             nodes,
