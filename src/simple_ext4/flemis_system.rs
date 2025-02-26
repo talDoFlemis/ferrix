@@ -7,7 +7,7 @@ use rand::distr::Uniform;
 use rand::Rng;
 use std::{
     ffi::OsString,
-    io::{Cursor, Read, Write},
+    io::{BufReader, Cursor, Read, Seek, Write},
     os::unix::fs::MetadataExt,
     path::PathBuf,
     process::exit,
@@ -16,7 +16,10 @@ use std::{
 };
 
 use crate::{
-    system::{ListCommandOutput, Number, System, SystemError},
+    ext_arr::ExtArr,
+    mem::FixedSizeMem,
+    sort::ExtSorter,
+    system::{ListCommandOutput, Number, System, SystemError, DEFAULT_MEM_SIZE},
     vdisk::{self, VDisk, VDiskSize},
 };
 
@@ -126,9 +129,9 @@ impl System for FlemisSystem {
         }
 
         let start: usize = cmd.start.try_into()?;
-        let end: usize = cmd.end.try_into()?;
+        let mut end: usize = cmd.end.try_into()?;
         if start > end {
-            bail!(SystemError::StartGreaterThanEnd);
+            end = start + 10;
         }
 
         let file = std::fs::File::open(file)?;
@@ -138,7 +141,7 @@ impl System for FlemisSystem {
         let vec_len: u64 = bincode::deserialize_from(&mut reader)?;
 
         if end >= vec_len as usize {
-            bail!(SystemError::EndGreaterThanFileSize);
+            end = vec_len.try_into()?;
         }
 
         // Skip elements before start
@@ -147,7 +150,7 @@ impl System for FlemisSystem {
         }
 
         // Read only the required elements
-        let elements_to_read = end - start + 1;
+        let elements_to_read = end - start;
         let mut result = Vec::with_capacity(elements_to_read);
 
         for _ in 0..elements_to_read {
@@ -224,7 +227,44 @@ impl System for FlemisSystem {
     }
 
     fn sort(&self, cmd: &crate::complete_command::SortCommand) -> Result<()> {
-        todo!()
+        let path = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.file));
+
+        if !path.exists() {
+            bail!(SystemError::NoSuchFileOrDirectory);
+        }
+
+        let file = std::fs::File::open(path.clone())?;
+        let reader = BufReader::new(file);
+        let numbers: Vec<u16> = bincode::deserialize_from(reader)?;
+        let length = numbers.len();
+
+        let mut mem = FixedSizeMem::<DEFAULT_MEM_SIZE>::new();
+        let mut arr = ExtArr::<Number, _>::new(Cursor::new(Vec::new()));
+
+        arr.write(&numbers)?;
+        arr.flush()?;
+        arr.rewind()?;
+
+        ExtSorter::sort(&mut arr, mem.as_mut(), |_| {
+            Ok(ExtArr::new(Cursor::new(Vec::new())))
+        })?;
+
+        arr.rewind()?;
+
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .open(path)?;
+        let mut writer = std::io::BufWriter::new(file);
+
+        let mut values = Vec::with_capacity(length);
+        let casted_values = arr.read_to_end(&mut values)?;
+        let encoded = bincode::serialize(casted_values)?;
+
+        writer.write_all(&encoded)?;
+        writer.flush()?;
+
+        Ok(())
     }
 
     fn cat(&self, cmd: &crate::complete_command::CatCommand) -> Result<PathBuf> {
