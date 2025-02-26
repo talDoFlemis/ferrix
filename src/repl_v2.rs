@@ -1,3 +1,4 @@
+use byte_unit::{Byte, Unit, UnitType};
 use clean_path::Clean;
 use std::borrow::Cow;
 use std::path::PathBuf;
@@ -175,8 +176,16 @@ impl ReplV2 {
                         let table = Table::new(output.nodes).to_string();
                         println!("{table}");
                         println!("Total: {len} nodes");
-                        println!("Total disk size: {total_size} bytes");
-                        println!("Remaining disk size: {remaining_size} bytes");
+                        println!(
+                            "Total disk size: {}",
+                            Byte::from_u64(total_size.into())
+                                .get_appropriate_unit(UnitType::Binary)
+                        );
+                        println!(
+                            "Remaining disk size: {}",
+                            Byte::from_u64(remaining_size.into())
+                                .get_appropriate_unit(UnitType::Binary)
+                        );
                     }
                     Err(e) => eprintln!("Error listing: {:?}", e),
                 }

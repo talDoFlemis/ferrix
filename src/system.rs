@@ -25,7 +25,9 @@ pub type Number = u16;
 #[derive(Debug, Clone, Eq, PartialEq, Tabled)]
 pub struct NodeInfo {
     pub name: String,
-    pub size: VDiskSize,
+    #[tabled(skip)]
+    pub size_in_bytes: VDiskSize,
+    pub human_readable_size: String,
     pub is_dir: bool,
 }
 

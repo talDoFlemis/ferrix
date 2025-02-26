@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use byte_unit::Byte;
 use clean_path::Clean;
 use fuser::{BackgroundSession, MountOption};
 use rand::distr::Uniform;
@@ -166,7 +167,10 @@ impl System for FlemisSystem {
             let node_info = crate::system::NodeInfo {
                 name: file_name,
                 is_dir: false,
-                size: size as vdisk::VDiskSize,
+                size_in_bytes: size as vdisk::VDiskSize,
+                human_readable_size: Byte::from_u64(size)
+                    .get_appropriate_unit(byte_unit::UnitType::Binary)
+                    .to_string(),
             };
 
             nodes.push(node_info);
@@ -184,7 +188,10 @@ impl System for FlemisSystem {
                         .into_string()
                         .expect("expected to be a string"),
                     is_dir: metadata.is_dir(),
-                    size: size as VDiskSize,
+                    size_in_bytes: size as VDiskSize,
+                    human_readable_size: Byte::from_u64(size)
+                        .get_appropriate_unit(byte_unit::UnitType::Binary)
+                        .to_string(),
                 };
 
                 nodes.push(node_info);
