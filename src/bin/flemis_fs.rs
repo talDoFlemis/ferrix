@@ -26,9 +26,12 @@ fn main() -> Result<()> {
 
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let options = vec![MountOption::FSName("flemis".to_string())];
+        let options = vec![
+            MountOption::FSName("flemis".to_string()),
+            MountOption::AllowOther,
+        ];
         let fs = ferrix::simple_ext4::fs_in_fs::FSInFS::new(
-            "./.tmp/storage".into(),
+            "/tmp/storage".into(),
             true,
             false,
             cli.block_size.into(),

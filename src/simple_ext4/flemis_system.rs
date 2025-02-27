@@ -5,6 +5,7 @@ use fuser::{BackgroundSession, MountOption};
 use memmap::{Mmap, MmapMut, MmapOptions};
 use rand::distr::Uniform;
 use rand::Rng;
+use tracing::info;
 use std::{
     ffi::{OsStr, OsString},
     io::{BufReader, Cursor, Read, Seek, Write},
@@ -217,6 +218,7 @@ impl System for FlemisSystem {
     }
 
     fn sort(&self, cmd: &crate::complete_command::SortCommand) -> Result<()> {
+        let start = std::time::Instant::now();
         let path = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.file));
 
         if !path.exists() {
@@ -253,6 +255,7 @@ impl System for FlemisSystem {
 
         writer.write_all(&encoded)?;
         writer.flush()?;
+        info!("Sort took {:?}", start.elapsed());
 
         Ok(())
     }
