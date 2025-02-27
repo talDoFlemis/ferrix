@@ -238,6 +238,7 @@ pub struct FSInFS {
     next_file_handle: AtomicU64,
     direct_io: bool,
     suid_support: bool,
+    size: u64,
 }
 
 impl FSInFS {
@@ -245,6 +246,7 @@ impl FSInFS {
         data_dir: String,
         direct_io: bool,
         #[allow(unused_variables)] suid_support: bool,
+        size: u64,
     ) -> FSInFS {
         {
             FSInFS {
@@ -252,6 +254,7 @@ impl FSInFS {
                 next_file_handle: AtomicU64::new(1),
                 direct_io,
                 suid_support: false,
+                size,
             }
         }
     }

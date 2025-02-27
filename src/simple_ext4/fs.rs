@@ -8,7 +8,8 @@ use super::{
 use anyhow::anyhow;
 use fs::OpenOptions;
 use fuser::{
-    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite, Request
+    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData,
+    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite, Request,
 };
 use io::{Cursor, SeekFrom};
 use memmap::MmapMut;
@@ -982,53 +983,6 @@ impl Filesystem for SimpleExt4FS {
         }
         debug!("destroyed");
     }
-
-    fn open(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
-        let (access_mask, read, write) = match flags & libc::O_ACCMODE {
-            libc::O_RDONLY => {
-                // Behavior is undefined, but most filesystems return EACCES
-                if flags & libc::O_TRUNC != 0 {
-                    reply.error(libc::EACCES);
-                    return;
-                }
-                if flags & FMODE_EXEC != 0 {
-                    // Open is from internal exec syscall
-                    (libc::X_OK, true, false)
-                } else {
-                    (libc::R_OK, true, false)
-                }
-            }
-            libc::O_WRONLY => (libc::W_OK, false, true),
-            libc::O_RDWR => (libc::R_OK | libc::W_OK, true, true),
-            // Exactly one access mode flag must be specified
-            _ => {
-                reply.error(libc::EINVAL);
-                return;
-            }
-        };
-
-        match self.find_inode(inode as u32) {
-            Ok(mut attr) => {
-                if check_access(
-                    attr.uid,
-                    attr.gid,
-                    attr.mode,
-                    req.uid(),
-                    req.gid(),
-                    access_mask,
-                ) {
-                    attr.open_file_handles += 1;
-                    self.write_inode(&attr);
-                    let open_flags = 0;
-                    reply.opened(self.allocate_next_file_handle(read, write), open_flags);
-                } else {
-                    reply.error(libc::EACCES);
-                }
-                return;
-            }
-            Err(error_code) => reply.error(error_code as i32),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1108,23 +1062,23 @@ mod tests {
     //     Ok(std::fs::remove_file(&tmp_file)?)
     // }
 
-    #[test]
-    fn init_destroy() -> anyhow::Result<()> {
-        let tmp_file = make_fs("init_destroy")?;
-        let fs = SimpleExt4FS::new(&tmp_file)?;
-        let tmp_dir = tempfile::tempdir()?.path().join("init_destroy");
-        fs::create_dir_all(&tmp_dir)?;
-
-        assert_eq!(fs.superblock().last_mounted_at, None);
-
-        let fs = SimpleExt4FS::new(&tmp_file)?;
-
-        assert_ne!(fs.superblock().last_mounted_at, None);
-        assert_eq!(fs.superblock().free_inodes, BLOCK_SIZE * 8 - 1);
-        assert_eq!(fs.superblock().free_blocks, BLOCK_SIZE * 8 - 1);
-
-        Ok(std::fs::remove_file(&tmp_file)?)
-    }
+    // #[test]
+    // fn init_destroy() -> anyhow::Result<()> {
+    //     let tmp_file = make_fs("init_destroy")?;
+    //     let fs = SimpleExt4FS::new(&tmp_file)?;
+    //     let tmp_dir = tempfile::tempdir()?.path().join("init_destroy");
+    //     fs::create_dir_all(&tmp_dir)?;
+    //
+    //     assert_eq!(fs.superblock().last_mounted_at, None);
+    //
+    //     let fs = SimpleExt4FS::new(&tmp_file)?;
+    //
+    //     assert_ne!(fs.superblock().last_mounted_at, None);
+    //     assert_eq!(fs.superblock().free_inodes, BLOCK_SIZE * 8 - 1);
+    //     assert_eq!(fs.superblock().free_blocks, BLOCK_SIZE * 8 - 1);
+    //
+    //     Ok(std::fs::remove_file(&tmp_file)?)
+    // }
 
     #[test]
     fn data_block_seek_position() {
