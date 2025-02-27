@@ -21,7 +21,7 @@ fn main() -> Result<()> {
     };
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
 
-    let mount_point = PathBuf::from("/tmp/flemisfs2");
+    let mount_point = PathBuf::from("/tmp/flemisfs");
     let mount2 = mount_point.clone();
 
     let (sender, receiver) = mpsc::channel();
