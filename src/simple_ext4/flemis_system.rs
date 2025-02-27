@@ -5,7 +5,6 @@ use fuser::{BackgroundSession, MountOption};
 use memmap::{Mmap, MmapMut, MmapOptions};
 use rand::distr::Uniform;
 use rand::Rng;
-use tracing::info;
 use std::{
     ffi::{OsStr, OsString},
     io::{BufReader, Cursor, Read, Seek, Write},
@@ -15,6 +14,7 @@ use std::{
     sync::{Arc, Mutex},
     thread, u16, usize,
 };
+use tracing::info;
 
 use crate::{
     ext_arr::ExtArr,
@@ -231,14 +231,16 @@ impl System for FlemisSystem {
         let length = numbers.len();
 
         let mut mem = FixedSizeMem::<DEFAULT_MEM_SIZE>::new();
-        let mut arr = ExtArr::<Number, _>::new(Cursor::new(Vec::new()));
+        let mut arr = ExtArr::<Number, _>::new(Cursor::new(Vec::with_capacity(length * 2)));
 
         arr.write(&numbers)?;
         arr.flush()?;
         arr.rewind()?;
 
         ExtSorter::sort(&mut arr, mem.as_mut(), |_| {
-            Ok(ExtArr::new(Cursor::new(Vec::new())))
+            Ok(ExtArr::new(Cursor::new(Vec::with_capacity(
+                DEFAULT_MEM_SIZE,
+            ))))
         })?;
 
         arr.rewind()?;
