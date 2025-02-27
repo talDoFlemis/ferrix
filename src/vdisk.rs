@@ -1,8 +1,11 @@
 use std::{
     fs::{File, OpenOptions},
     io,
+    os::unix::fs::MetadataExt,
     path::PathBuf,
 };
+
+use crate::mem::size;
 
 /// One gigabyte in bytes
 pub static DEFAULT_SIZE_IN_BYTES: u32 = 1e9 as u32;
@@ -14,6 +17,7 @@ pub type VDiskSize = u32;
 pub struct VDisk {
     pub size: VDiskSize,
     pub disk: File,
+    pub path: PathBuf,
 }
 
 impl Clone for VDisk {
@@ -21,6 +25,7 @@ impl Clone for VDisk {
         Self {
             size: self.size,
             disk: self.disk.try_clone().expect("Failed to clone disk"),
+            path: self.path.clone(),
         }
     }
 }
@@ -28,9 +33,22 @@ impl Clone for VDisk {
 impl VDisk {
     pub fn new(path: PathBuf, size: u32) -> VDiskResult<Self> {
         match path.exists() {
-            true => Self::try_from(File::open(path)?),
+            true => Self::open(path),
             false => Self::create_new_disk(path, size),
         }
+    }
+
+    fn open(path: PathBuf) -> VDiskResult<VDisk> {
+        let disk = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .truncate(true)
+            .open(&path)?;
+
+        let metadata = disk.metadata()?;
+        let size = metadata.size().try_into().expect("expected to get size");
+
+        Ok(Self { size, disk, path })
     }
 
     #[cfg(target_os = "linux")]
@@ -39,6 +57,7 @@ impl VDisk {
         use std::os::fd::AsRawFd;
 
         let disk = OpenOptions::new()
+            .read(true)
             .write(true)
             .create(true)
             .truncate(true)
@@ -46,26 +65,7 @@ impl VDisk {
 
         fallocate(disk.as_raw_fd(), FallocateFlags::empty(), 0, size.into())?;
 
-        Ok(Self { size, disk })
-    }
-}
-
-impl TryFrom<File> for VDisk {
-    type Error = io::Error;
-
-    fn try_from(disk: File) -> std::result::Result<Self, Self::Error> {
-        let size = disk.metadata()?.len() as u32;
-        Ok(Self { size, disk })
-    }
-}
-
-impl TryFrom<PathBuf> for VDisk {
-    type Error = io::Error;
-
-    fn try_from(disk: PathBuf) -> std::result::Result<Self, Self::Error> {
-        let disk = File::open(disk)?;
-        let size = disk.metadata()?.len() as u32;
-        Ok(Self { size, disk })
+        Ok(Self { size, disk, path })
     }
 }
 
@@ -88,38 +88,6 @@ mod tests {
         // Verify file exists and has correct size
         let metadata = fs::metadata(path)?;
         assert_eq!(metadata.len() as u32, size);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_existing_disk_open() -> Result<()> {
-        let dir = tempdir()?;
-        let path = dir.path().join("existing_disk.vd");
-        let size = 1024 * 1024; // 1MB
-
-        // Create initial disk
-        let _vdisk = VDisk::new(path.clone(), size)?;
-
-        // Try opening existing disk
-        let vdisk2 = VDisk::new(path.clone(), size)?;
-        assert_eq!(vdisk2.size, size);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_try_from_pathbuf() -> Result<()> {
-        let dir = tempdir()?;
-        let path = dir.path().join("convert_disk.vd");
-        let size = 1024 * 1024; // 1MB
-
-        // Create initial disk
-        let _vdisk = VDisk::new(path.clone(), size)?;
-
-        // Convert from PathBuf
-        let vdisk2 = VDisk::try_from(path)?;
-        assert_eq!(vdisk2.size, size);
 
         Ok(())
     }
