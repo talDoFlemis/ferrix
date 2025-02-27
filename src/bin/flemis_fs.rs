@@ -16,7 +16,9 @@ use tracing::{info, Level};
 fn main() -> Result<()> {
     let cli = FerrixCLI::parse();
 
+    let storage = "/tmp/storage/";
     if !cli.vdisk_path.exists() {
+        std::fs::remove_dir_all(storage)?;
         VDisk::new(cli.vdisk_path.clone(), cli.size_in_bytes)?;
     };
     tracing_subscriber::fmt().with_max_level(Level::INFO).init();
@@ -26,10 +28,7 @@ fn main() -> Result<()> {
 
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let options = vec![
-            MountOption::FSName("flemis".to_string()),
-            MountOption::AllowOther,
-        ];
+        let options = vec![MountOption::FSName("flemis".to_string())];
         let fs = ferrix::simple_ext4::fs_in_fs::FSInFS::new(
             "/tmp/storage".into(),
             true,
