@@ -10,6 +10,7 @@ use std::{
     path::Path,
     time::SystemTime,
 };
+use tracing::debug;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Superblock {
@@ -118,7 +119,8 @@ impl Group {
             let offset = super::block_group_size(blk_size as u32) * i as u64 + SUPERBLOCK_SIZE;
             w.seek(SeekFrom::Start(offset))?;
             w.write_all(g.data_bitmap.as_raw_slice())?;
-            w.write_all(g.inode_bitmap.as_raw_slice())?;
+            w.write_all(g.inode_bitmap.as_raw_slice())
+                .inspect_err(|e| println!("expected to be here {e:?}"))?;
         }
 
         Ok(())
@@ -130,6 +132,9 @@ impl Group {
     {
         let mut groups = Vec::with_capacity(count);
         let mut buf = vec![0u8; blk_size as usize];
+        unsafe {
+            buf.set_len(blk_size as usize);
+        }
 
         for i in 0..count {
             let offset = super::block_group_size(blk_size) * i as u64 + SUPERBLOCK_SIZE;
@@ -247,32 +252,25 @@ pub struct Inode {
     pub block_size: u32,
 }
 
-impl Default for Inode {
-    fn default() -> Self {
+impl Inode {
+    pub fn new(block_size: u32) -> Self {
+        let now = SystemTime::now();
         Self {
-            mode: libc::mode_t::default(),
+            mode: 0,
             hard_links: 1,
-            user_id: libc::uid_t::default(),
-            group_id: libc::gid_t::default(),
+            user_id: 0,
+            group_id: 0,
             block_count: 0,
             size: 0,
-            created_at: SystemTime::now(),
-            accessed_at: SystemTime::now(),
-            modified_at: SystemTime::now(),
-            changed_at: SystemTime::now(),
-            direct_blocks: [0; DIRECT_POINTERS as usize],
+            created_at: now,
+            accessed_at: now,
+            modified_at: now,
+            changed_at: now,
+            direct_blocks: [0u32; DIRECT_POINTERS as usize],
+            block_size,
             indirect_block: 0,
             double_indirect_block: 0,
             checksum: 0,
-            block_size: super::DEFAULT_BLOCK_SIZE,
-        }
-    }
-}
-
-impl Inode {
-    pub fn new() -> Self {
-        Self {
-            ..Default::default()
         }
     }
 
@@ -291,7 +289,9 @@ impl Inode {
     }
 
     pub fn deserialize_from<R: std::io::Read>(r: R) -> anyhow::Result<Self> {
-        let mut inode: Self = bincode::deserialize_from(r)?;
+        let mut inode: Self =
+            bincode::deserialize_from(r).inspect_err(|e| println!("expected to be here {e:?}"))?;
+        println!("inode: {:?}", inode);
         if !inode.verify_checksum() {
             return Err(anyhow!("Inode checksum verification failed"));
         }
@@ -448,9 +448,9 @@ impl Directory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::*;
     use std::io::Cursor;
     use std::time::{self, SystemTime};
-    use anyhow::*;
 
     #[test]
     fn superblock_new() {

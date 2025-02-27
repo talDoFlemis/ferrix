@@ -1,12 +1,14 @@
+use crate::{simple_ext4::mkfs::make, vdisk::VDisk};
+
 use super::{
+    fs_in_fs::check_access,
     types::{Directory, Group, Inode, Superblock},
     DIRECT_POINTERS, INODE_SIZE, ROOT_INODE, SUPERBLOCK_SIZE,
 };
 use anyhow::anyhow;
 use fs::OpenOptions;
 use fuser::{
-    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData,
-    ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyWrite, Request,
+    FileAttr, FileType, Filesystem, KernelConfig, ReplyAttr, ReplyCreate, ReplyData, ReplyDirectory, ReplyEmpty, ReplyEntry, ReplyOpen, ReplyWrite, Request
 };
 use io::{Cursor, SeekFrom};
 use memmap::MmapMut;
@@ -14,7 +16,6 @@ use nix::{
     errno::Errno,
     sys::stat::{Mode, SFlag},
 };
-use std::time::{Duration, UNIX_EPOCH};
 use std::{
     ffi::{OsStr, OsString},
     fs,
@@ -22,6 +23,11 @@ use std::{
     mem,
     path::Path,
 };
+use std::{
+    path::PathBuf,
+    time::{Duration, UNIX_EPOCH},
+};
+use tracing::debug;
 
 pub type FSResult<T> = Result<T, nix::Error>;
 
@@ -33,17 +39,16 @@ pub struct SimpleExt4FS {
 }
 
 impl SimpleExt4FS {
-    pub fn new<P>(image_path: P) -> anyhow::Result<Self>
+    pub fn new<P>(path: P) -> anyhow::Result<Self>
     where
         P: AsRef<Path>,
     {
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .open(image_path.as_ref())?;
+        let file = OpenOptions::new().read(true).write(true).open(path)?;
         let mmap = unsafe { MmapMut::map_mut(&file)? };
         let mut cursor = Cursor::new(&mmap);
-        let sb: Superblock = Superblock::deserialize_from(&mut cursor)?;
+
+        let sb = Superblock::deserialize_from(&mut cursor)?;
+
         let groups = Group::deserialize_from(&mut cursor, sb.block_size, sb.groups as usize)?;
 
         let mut fs = Self {
@@ -63,7 +68,7 @@ impl SimpleExt4FS {
             return Ok(());
         }
 
-        let mut inode = Inode::new();
+        let mut inode = Inode::new(self.superblock().block_size);
         inode.mode = SFlag::S_IFDIR.bits() | 0o777;
         inode.hard_links = 2;
 
@@ -87,13 +92,16 @@ impl SimpleExt4FS {
         let offset = self.inode_seek_position(index);
         let buf = self.mmap_mut().as_mut();
         let mut cursor = Cursor::new(buf);
+        debug!("save_inode: offset={}", offset);
         cursor.seek(SeekFrom::Start(offset))?;
 
         Ok(inode.serialize_into(&mut cursor)?)
     }
 
     fn save_dir(&mut self, mut dir: Directory, index: u32) -> anyhow::Result<()> {
+        debug!("save_dir: index={}, dir={:?}", index, dir);
         let mut inode = self.find_inode(index)?;
+        debug!("save_dir: inode={:?}", inode);
         inode.update_modified_at();
         self.save_inode(inode, index)?;
 
@@ -106,6 +114,7 @@ impl SimpleExt4FS {
     }
 
     fn find_inode(&self, index: u32) -> FSResult<Inode> {
+        debug!("find_inode: index={}", index);
         let (group_index, _bitmap_index) = self.inode_offsets(index);
         if !self
             .groups()
@@ -115,15 +124,19 @@ impl SimpleExt4FS {
         {
             return Err(Errno::ENOENT);
         }
+        debug!("find_inode: group_index={}", group_index);
 
         let offset = self.inode_seek_position(index);
+        debug!("find_inode: offset={}", offset);
         let buf = self.mmap();
         let mut cursor = Cursor::new(buf);
         cursor
             .seek(SeekFrom::Start(offset))
-            .map_err(|_e| Errno::EIO)?;
+            .inspect_err(|e| debug!("seek failed {}", e))
+            .unwrap();
 
         let inode = Inode::deserialize_from(cursor).map_err(|_e| Errno::EIO)?;
+        debug!("find_inode: inode={:?}", inode);
         Ok(inode)
     }
 
@@ -161,6 +174,7 @@ impl SimpleExt4FS {
     }
 
     fn find_dir_from_inode(&self, index: u32) -> FSResult<Directory> {
+        debug!("find_dir_from_inode: index={}", index);
         let inode = self.find_inode(index)?;
         if !inode.is_dir() {
             return Err(Errno::ENOTDIR);
@@ -492,7 +506,9 @@ impl SimpleExt4FS {
     }
 
     fn groups(&self) -> &[Group] {
-        self.groups.as_ref().unwrap()
+        self.groups
+            .as_ref()
+            .expect("expected to get reference to group")
     }
 
     fn groups_mut(&mut self) -> &mut [Group] {
@@ -518,6 +534,7 @@ impl SimpleExt4FS {
 
 impl Filesystem for SimpleExt4FS {
     fn lookup(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEntry) {
+        debug!("lookup: parent={}, name={:?}", parent, name);
         match self.find_dir_from_inode(parent as u32) {
             Ok(dir) => match dir.entry(name) {
                 Ok(index) => match self.find_inode(index) {
@@ -532,7 +549,22 @@ impl Filesystem for SimpleExt4FS {
         }
     }
 
-    fn getattr(&mut self, _req: &Request, ino: u64, _fh: Option<u64>, reply: ReplyAttr) {
+    fn statfs(&mut self, _req: &Request<'_>, _ino: u64, reply: fuser::ReplyStatfs) {
+        let sb = self.superblock();
+        reply.statfs(
+            sb.block_count.into(),
+            sb.free_blocks.into(),
+            sb.free_blocks.into(),
+            sb.inode_count.into(),
+            sb.free_inodes.into(),
+            sb.block_size,
+            255,
+            sb.block_size,
+        );
+    }
+
+    fn getattr(&mut self, _req: &Request, ino: u64, fh: Option<u64>, reply: ReplyAttr) {
+        debug!("getattr: ino={}, fh={:?}", ino, fh);
         match self.find_inode(ino as u32) {
             Ok(inode) => {
                 reply.attr(&Duration::from_secs(1), &inode.to_attr(ino as u32));
@@ -545,10 +577,11 @@ impl Filesystem for SimpleExt4FS {
         &mut self,
         _req: &Request,
         ino: u64,
-        _fh: u64,
+        fh: u64,
         offset: i64,
         mut reply: ReplyDirectory,
     ) {
+        debug!("readdir: ino={}, fh={}, offset={}", ino, fh, offset);
         match self.find_dir_from_inode(ino as u32) {
             Ok(dir) => {
                 let mut entries: Vec<(OsString, u64, FileType)> = vec![
@@ -584,10 +617,14 @@ impl Filesystem for SimpleExt4FS {
         parent: u64,
         name: &OsStr,
         mode: u32,
-        _umask: u32,
-        _flags: i32,
+        umask: u32,
+        flags: i32,
         reply: ReplyCreate,
     ) {
+        debug!(
+            "create: parent={}, name={:?}, mode={:#o}, umask={:#o}, flags={:#x}",
+            parent, name, mode, umask, flags
+        );
         let index = match self.allocate_inode() {
             Some(index) => index,
             None => {
@@ -596,7 +633,7 @@ impl Filesystem for SimpleExt4FS {
             }
         };
 
-        let mut inode = Inode::new();
+        let mut inode = Inode::new(self.superblock().block_size);
         inode.mode = mode;
         inode.user_id = self.superblock().uid;
         inode.group_id = self.superblock().gid;
@@ -633,14 +670,18 @@ impl Filesystem for SimpleExt4FS {
         &mut self,
         _req: &Request,
         ino: u64,
-        _fh: u64,
+        fh: u64,
         offset: i64,
         data: &[u8],
-        _write_flags: u32,
-        _flags: i32,
-        _lock_owner: Option<u64>,
+        write_flags: u32,
+        flags: i32,
+        lock_owner: Option<u64>,
         reply: ReplyWrite,
     ) {
+        debug!(
+            "write: ino={}, fh={}, offset={}, data.len={}, write_flags={:#x}, flags={:#x}, lock_owner={:?}",
+            ino, fh, offset, data.len(), write_flags, flags, lock_owner
+        );
         let mut inode = match self.find_inode(ino as u32) {
             Ok(inode) => inode,
             Err(e) => {
@@ -700,6 +741,8 @@ impl Filesystem for SimpleExt4FS {
             return;
         }
 
+        debug!("wrote {} bytes", total_wrote);
+
         reply.written(total_wrote as u32);
     }
 
@@ -707,13 +750,17 @@ impl Filesystem for SimpleExt4FS {
         &mut self,
         _req: &Request,
         ino: u64,
-        _fh: u64,
+        fh: u64,
         offset: i64,
         size: u32,
-        _flags: i32,
-        _lock_owner: Option<u64>,
+        flags: i32,
+        lock_owner: Option<u64>,
         reply: ReplyData,
     ) {
+        debug!(
+            "read: ino={}, fh={}, offset={}, size={}, flags={:#x}, lock_owner={:?}",
+            ino, fh, offset, size, flags, lock_owner
+        );
         let mut inode = match self.find_inode(ino as u32) {
             Ok(inode) => inode,
             Err(e) => {
@@ -772,15 +819,39 @@ impl Filesystem for SimpleExt4FS {
         reply.data(&data[..total_read]);
     }
 
+    fn access(&mut self, req: &Request<'_>, ino: u64, mask: i32, reply: ReplyEmpty) {
+        match self.find_inode(ino as u32) {
+            Ok(attr) => {
+                if check_access(
+                    attr.user_id,
+                    attr.group_id,
+                    attr.mode.try_into().unwrap(),
+                    req.uid(),
+                    req.gid(),
+                    mask,
+                ) {
+                    reply.ok();
+                } else {
+                    reply.error(libc::EACCES);
+                }
+            }
+            Err(error_code) => reply.error(error_code as i32),
+        }
+    }
+
     fn mkdir(
         &mut self,
         _req: &Request,
         parent: u64,
         name: &OsStr,
         mode: u32,
-        _umask: u32,
+        umask: u32,
         reply: ReplyEntry,
     ) {
+        debug!(
+            "mkdir: parent={}, name={:?}, mode={:#o}, umask={:#o}",
+            parent, name, mode, umask
+        );
         let index = match self.allocate_inode() {
             Some(index) => index,
             None => {
@@ -788,12 +859,13 @@ impl Filesystem for SimpleExt4FS {
                 return;
             }
         };
+        debug!("mkdir: index={}", index);
 
         match self.find_dir_from_inode(parent as u32) {
             Ok(mut parent_dir) => {
                 parent_dir.entries.insert(name.to_owned(), index);
 
-                let mut inode = Inode::new();
+                let mut inode = Inode::new(self.superblock().block_size);
                 inode.mode = SFlag::S_IFDIR.bits() | mode;
                 inode.hard_links = 2;
                 inode.user_id = self.superblock().uid;
@@ -824,10 +896,12 @@ impl Filesystem for SimpleExt4FS {
                     return;
                 }
 
-                if let Err(_) = self.save_dir(parent_dir, parent as u32) {
+                if let Err(e) = self.save_dir(parent_dir, parent as u32) {
+                    println!("here3 {:?}", e);
                     reply.error(libc::EIO);
                     return;
                 }
+                println!("here4");
 
                 match self.find_inode(index) {
                     Ok(created_inode) => {
@@ -841,6 +915,7 @@ impl Filesystem for SimpleExt4FS {
     }
 
     fn unlink(&mut self, _req: &Request, parent: u64, name: &OsStr, reply: ReplyEmpty) {
+        debug!("unlink: parent={}, name={:?}", parent, name);
         match self.find_dir_from_inode(parent as u32) {
             Ok(mut parent_dir) => match parent_dir.entries.remove(name) {
                 Some(index) => match self.find_inode(index) {
@@ -875,7 +950,8 @@ impl Filesystem for SimpleExt4FS {
         }
     }
 
-    fn init(&mut self, _req: &Request, _config: &mut KernelConfig) -> Result<(), i32> {
+    fn init(&mut self, _req: &Request<'_>, config: &mut KernelConfig) -> Result<(), libc::c_int> {
+        debug!("init: kernel_config={:?}", config);
         let sb = self.superblock_mut();
         sb.update_last_mounted_at();
         sb.update_modified_at();
@@ -884,19 +960,74 @@ impl Filesystem for SimpleExt4FS {
     }
 
     fn destroy(&mut self) {
+        debug!("destroy called");
         let mut mmap = mem::replace(&mut self.mmap, None).unwrap();
         let buf = mmap.as_mut();
         let mut cursor = Cursor::new(buf);
 
-        if let Err(_) = self.superblock_mut().serialize_into(&mut cursor) {
+        if let Err(e) = self.superblock_mut().serialize_into(&mut cursor) {
+            println!("inside superblock {e:?}");
             return;
         }
 
-        if let Err(_) = Group::serialize_into(&mut cursor, self.groups()) {
+        if let Err(e) = Group::serialize_into(&mut cursor, self.groups()) {
+            println!("inside group {e:?}");
             return;
         }
 
-        let _ = mmap.flush();
+        debug!("flushing mmap");
+        if let Err(e) = mmap.flush() {
+            println!("inside flush {e:?}");
+            return;
+        }
+        debug!("destroyed");
+    }
+
+    fn open(&mut self, req: &Request, inode: u64, flags: i32, reply: ReplyOpen) {
+        let (access_mask, read, write) = match flags & libc::O_ACCMODE {
+            libc::O_RDONLY => {
+                // Behavior is undefined, but most filesystems return EACCES
+                if flags & libc::O_TRUNC != 0 {
+                    reply.error(libc::EACCES);
+                    return;
+                }
+                if flags & FMODE_EXEC != 0 {
+                    // Open is from internal exec syscall
+                    (libc::X_OK, true, false)
+                } else {
+                    (libc::R_OK, true, false)
+                }
+            }
+            libc::O_WRONLY => (libc::W_OK, false, true),
+            libc::O_RDWR => (libc::R_OK | libc::W_OK, true, true),
+            // Exactly one access mode flag must be specified
+            _ => {
+                reply.error(libc::EINVAL);
+                return;
+            }
+        };
+
+        match self.find_inode(inode as u32) {
+            Ok(mut attr) => {
+                if check_access(
+                    attr.uid,
+                    attr.gid,
+                    attr.mode,
+                    req.uid(),
+                    req.gid(),
+                    access_mask,
+                ) {
+                    attr.open_file_handles += 1;
+                    self.write_inode(&attr);
+                    let open_flags = 0;
+                    reply.opened(self.allocate_next_file_handle(read, write), open_flags);
+                } else {
+                    reply.error(libc::EACCES);
+                }
+                return;
+            }
+            Err(error_code) => reply.error(error_code as i32),
+        }
     }
 }
 
@@ -958,19 +1089,37 @@ mod tests {
         assert_eq!(3072 + 8192 * INODE_SIZE + 1024 * 1024 * 8 + 2048, offset); // superblock + data bitmap + inode bitmap + inode table + data blocks + data bitmap + inode bitmap
     }
 
+    // #[test]
+    // fn new_fs() -> anyhow::Result<()> {
+    //     let tmp_file = make_fs("new_fs")?;
+    //     let fs = SimpleExt4FS::new(&tmp_file)?;
+    //     let inode = fs.find_inode(ROOT_INODE)?;
+    //
+    //     assert_eq!(inode.mode, SFlag::S_IFDIR.bits() | 0o777);
+    //     assert_eq!(inode.hard_links, 2);
+    //
+    //     assert!(fs.groups().first().unwrap().has_inode(ROOT_INODE as _));
+    //     assert!(fs.groups().first().unwrap().has_data_block(ROOT_INODE as _));
+    //
+    //     assert_eq!(fs.superblock().groups, fs.groups().len() as u32);
+    //     assert_eq!(fs.superblock().free_inodes, BLOCK_SIZE * 8 - 1);
+    //     assert_eq!(fs.superblock().free_blocks, BLOCK_SIZE * 8 - 1);
+    //
+    //     Ok(std::fs::remove_file(&tmp_file)?)
+    // }
+
     #[test]
-    fn new_fs() -> anyhow::Result<()> {
-        let tmp_file = make_fs("new_fs")?;
+    fn init_destroy() -> anyhow::Result<()> {
+        let tmp_file = make_fs("init_destroy")?;
         let fs = SimpleExt4FS::new(&tmp_file)?;
-        let inode = fs.find_inode(ROOT_INODE)?;
+        let tmp_dir = tempfile::tempdir()?.path().join("init_destroy");
+        fs::create_dir_all(&tmp_dir)?;
 
-        assert_eq!(inode.mode, SFlag::S_IFDIR.bits() | 0o777);
-        assert_eq!(inode.hard_links, 2);
+        assert_eq!(fs.superblock().last_mounted_at, None);
 
-        assert!(fs.groups().first().unwrap().has_inode(ROOT_INODE as _));
-        assert!(fs.groups().first().unwrap().has_data_block(ROOT_INODE as _));
+        let fs = SimpleExt4FS::new(&tmp_file)?;
 
-        assert_eq!(fs.superblock().groups, fs.groups().len() as u32);
+        assert_ne!(fs.superblock().last_mounted_at, None);
         assert_eq!(fs.superblock().free_inodes, BLOCK_SIZE * 8 - 1);
         assert_eq!(fs.superblock().free_blocks, BLOCK_SIZE * 8 - 1);
 
@@ -1031,19 +1180,22 @@ mod tests {
     //     assert_ne!(inode.accessed_at, UNIX_EPOCH);
     //
     //     struct TestReplyDirectory {
-    //         entries: Vec<(u64, i64, FileType, String)>
+    //         entries: Vec<(u64, i64, FileType, String)>,
     //     }
     //
     //     impl ReplyDirectory for TestReplyDirectory {
     //         fn add(&mut self, ino: u64, offset: i64, kind: FileType, name: &OsStr) -> bool {
-    //             self.entries.push((ino, offset, kind, name.to_string_lossy().into_owned()));
+    //             self.entries
+    //                 .push((ino, offset, kind, name.to_string_lossy().into_owned()));
     //             false
     //         }
     //         fn ok(&mut self) {}
     //         fn error(&mut self, _err: i32) {}
     //     }
     //
-    //     let mut reply = TestReplyDirectory { entries: Vec::new() };
+    //     let mut reply = TestReplyDirectory {
+    //         entries: Vec::new(),
+    //     };
     //     fs.readdir(&Request::new(0), ROOT_INODE, 0, 0, &mut reply);
     //     assert_eq!(reply.entries.len(), 2); // . and ..
     //
@@ -1070,7 +1222,9 @@ mod tests {
     //
     //     assert_eq!(fs.superblock().free_inodes, BLOCK_SIZE * 8 - 3);
     //
-    //     let mut reply = TestReplyDirectory { entries: Vec::new() };
+    //     let mut reply = TestReplyDirectory {
+    //         entries: Vec::new(),
+    //     };
     //     fs.readdir(&Request::new(0), ROOT_INODE, 0, 0, &mut reply);
     //     assert_eq!(reply.entries.len(), 4); // . and .. plus 2 files
     //
@@ -1410,7 +1564,8 @@ mod tests {
     // }
 
     fn make_fs(name: &str) -> anyhow::Result<PathBuf> {
-        let mut tmp_file = std::env::temp_dir();
+        let mut tmp_file = tempfile::tempdir()?.path().to_path_buf();
+        fs::create_dir_all(&tmp_file)?;
         tmp_file.push(name);
         tmp_file.set_extension("img");
         if tmp_file.exists() {

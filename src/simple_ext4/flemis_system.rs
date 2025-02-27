@@ -9,10 +9,10 @@ use std::{
     ffi::{OsStr, OsString},
     io::{BufReader, Cursor, Read, Seek, Write},
     os::unix::{ffi::OsStrExt, fs::MetadataExt},
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::exit,
     sync::{Arc, Mutex},
-    u16, usize,
+    thread, u16, usize,
 };
 
 use crate::{
@@ -26,21 +26,11 @@ use crate::{
 #[derive(Debug)]
 pub struct FlemisSystem {
     mount_point: PathBuf,
-    session: Arc<Mutex<BackgroundSession>>,
 }
 
 impl FlemisSystem {
-    pub fn new(vdisk: VDisk, mount_point: PathBuf) -> Result<Self> {
-        let fs = super::fs_in_fs::FSInFS::new("/tmp/storage".into(), true, false);
-        let options = vec![MountOption::FSName("flemis".to_string())];
-
-        let bg_session = fuser::spawn_mount2(fs, mount_point.clone(), &options)?;
-        let session = Arc::new(Mutex::new(bg_session));
-
-        Ok(Self {
-            mount_point,
-            session,
-        })
+    pub fn new(mount_point: PathBuf) -> Result<Self> {
+        Ok(Self { mount_point })
     }
 
     fn convert_path_to_vdisk_path(&self, path: &PathBuf) -> PathBuf {

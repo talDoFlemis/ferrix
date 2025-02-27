@@ -1,5 +1,5 @@
 pub mod cli;
-mod complete_command;
+pub mod complete_command;
 mod error;
 pub mod ext_arr;
 pub mod fs;

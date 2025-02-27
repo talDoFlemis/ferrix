@@ -2,11 +2,12 @@ pub mod fs;
 pub mod flemis_system;
 pub mod types;
 pub mod fs_in_fs;
+pub mod mkfs;
 use std::time::{self, SystemTime};
 
 const FERRIX_MAGIC: u32 = 0x64627a;
 const ROOT_INODE: u32 = 1;
-const INODE_SIZE: u64 = 128;
+const INODE_SIZE: u64 = 138;
 pub const SUPERBLOCK_SIZE: u64 = 1024;
 pub const DIRECT_POINTERS: u64 = 12;
 pub const DEFAULT_BLOCK_SIZE: u32 = 4096;
