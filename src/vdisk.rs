@@ -48,68 +48,6 @@ impl VDisk {
 
         Ok(Self { size, disk })
     }
-
-    #[cfg(target_os = "macos")]
-    fn create_new_disk(path: PathBuf, size: u32) -> VDiskResult<VDisk> {
-        use std::io::Write;
-        let mut disk = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(path)
-            .into_diagnostic()?;
-
-        let file_size = size as usize;
-        let chunk_size = 1024 * 1024;
-        let mut buffer = vec![0; chunk_size];
-
-        let mut written = 0;
-
-        while written < file_size {
-            let to_write = std::cmp::min(chunk_size, file_size - written);
-            disk.write_all(&buffer[..to_write]).into_diagnostic()?;
-            written += to_write;
-        }
-
-        Ok(Self { size, disk })
-    }
-
-    #[cfg(target_family = "windows")]
-    fn create_new_disk(path: PathBuf, size: u32) -> Result<VDisk> {
-        use std::os::windows::io::AsRawHandle;
-        use windows_sys::Win32::Storage::FileSystem::{
-            FileAllocationInfo, SetFileInformationByHandle, FILE_ALLOCATION_INFO,
-        };
-
-        let disk = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .open(path)
-            .into_diagnostic()?;
-
-        let handle = disk.as_raw_handle();
-
-        let allocation_info = FILE_ALLOCATION_INFO {
-            AllocationSize: size as i64,
-        };
-
-        let result = unsafe {
-            SetFileInformationByHandle(
-                handle as _,
-                FileAllocationInfo,
-                &allocation_info as *const _ as *mut _,
-                std::mem::size_of::<FILE_ALLOCATION_INFO>() as u32,
-            )
-        };
-
-        if result == 0 {
-            return Err(std::io::Error::last_os_error()).into_diagnostic();
-        }
-
-        disk.set_len(size as u64).into_diagnostic()?;
-        disk.sync_all().into_diagnostic()?;
-
-        Ok(Self { size, disk })
-    }
 }
 
 impl TryFrom<File> for VDisk {
@@ -201,28 +139,6 @@ mod tests {
 
             // Test Unix-specific file operations
             let written = vdisk.disk.write_at(b"test", 0)?;
-            assert_eq!(written, 4);
-
-            Ok(())
-        }
-    }
-
-    #[cfg(target_family = "windows")]
-    mod windows_tests {
-        use super::*;
-        use anyhow::Result;
-        use std::os::windows::fs::FileExt;
-
-        #[test]
-        fn test_windows_specific_disk_ops() -> Result<()> {
-            let dir = tempdir()?;
-            let path = dir.path().join("windows_disk.vd");
-            let size = 1024 * 1024; // 1MB
-
-            let vdisk = VDisk::new(path, size)?;
-
-            // Test Windows-specific file operations
-            let written = vdisk.disk.seek_write(b"test", 0)?;
             assert_eq!(written, 4);
 
             Ok(())
