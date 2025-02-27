@@ -5,7 +5,6 @@ use fuser::{BackgroundSession, MountOption};
 use memmap::{Mmap, MmapMut, MmapOptions};
 use rand::distr::Uniform;
 use rand::Rng;
-use tracing::info;
 use std::{
     ffi::{OsStr, OsString},
     io::{BufReader, Cursor, Read, Seek, Write},
@@ -15,9 +14,10 @@ use std::{
     sync::{Arc, Mutex},
     thread, u16, usize,
 };
+use tracing::info;
 
 use crate::{
-    ext_arr::ExtArr,
+    ext_arr::{ExtArr, FileBufRW},
     mem::FixedSizeMem,
     sort::ExtSorter,
     system::{ListCommandOutput, Number, System, SystemError, DEFAULT_MEM_SIZE},
@@ -218,6 +218,7 @@ impl System for FlemisSystem {
     }
 
     fn sort(&self, cmd: &crate::complete_command::SortCommand) -> Result<()> {
+        let mut mem = FixedSizeMem::<DEFAULT_MEM_SIZE>::new();
         let start = std::time::Instant::now();
         let path = self.convert_path_to_vdisk_path(&PathBuf::from(&cmd.file));
 
@@ -225,38 +226,20 @@ impl System for FlemisSystem {
             bail!(SystemError::NoSuchFileOrDirectory);
         }
 
-        let file = std::fs::File::open(path.clone())?;
-        let reader = BufReader::new(file);
-        let numbers: Vec<u16> = bincode::deserialize_from(reader)?;
-        let length = numbers.len();
+        let file_rw = FileBufRW::new(path.clone())?;
+        let mut arr = ExtArr::<Number, _>::new(file_rw);
 
-        let mut mem = FixedSizeMem::<DEFAULT_MEM_SIZE>::new();
-        let mut arr = ExtArr::<Number, _>::new(Cursor::new(Vec::new()));
-
-        arr.write(&numbers)?;
-        arr.flush()?;
-        arr.rewind()?;
-
-        ExtSorter::sort(&mut arr, mem.as_mut(), |_| {
-            Ok(ExtArr::new(Cursor::new(Vec::new())))
+        ExtSorter::sort(&mut arr, mem.as_mut(), |id| {
+            let mut new_path = path.clone();
+            let stem = new_path.file_stem().expect("Failed to get file name");
+            let mut new_fname = stem.to_os_string();
+            new_fname.push(format!("_tmp{id}"));
+            new_path.set_file_name(new_fname);
+            let file_rw = FileBufRW::new(new_path)?;
+            Ok(ExtArr::<Number, _>::new(file_rw))
         })?;
 
-        arr.rewind()?;
-
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .open(path)?;
-        let mut writer = std::io::BufWriter::new(file);
-
-        let mut values = Vec::with_capacity(length);
-        let casted_values = arr.read_to_end(&mut values)?;
-        let encoded = bincode::serialize(casted_values)?;
-
-        writer.write_all(&encoded)?;
-        writer.flush()?;
         info!("Sort took {:?}", start.elapsed());
-
         Ok(())
     }
 
